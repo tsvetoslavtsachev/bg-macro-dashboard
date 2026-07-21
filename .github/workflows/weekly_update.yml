@@ -1,0 +1,55 @@
+name: Седмично обновяване на данните
+
+on:
+  schedule:
+    # Всяка неделя в 06:00 UTC (09:00 Sofia time)
+    - cron: "0 6 * * 0"
+  workflow_dispatch:
+    inputs:
+      force_refresh:
+        description: "Форсирай обновяване на всички данни"
+        required: false
+        default: "false"
+        type: boolean
+
+permissions:
+  contents: write
+
+jobs:
+  update-dashboard:
+    runs-on: ubuntu-latest
+    name: Обновяване на макро данните и дашборда
+
+    steps:
+      - name: Checkout репозиторий
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Настройка на Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Инсталиране на зависимости
+        run: pip install -r requirements.txt
+
+      - name: Обновяване на данните и генериране на дашборд
+        run: |
+          if [ "${{ github.event.inputs.force_refresh }}" = "true" ]; then
+            python run.py --briefing --refresh
+          else
+            python run.py --briefing
+          fi
+
+      - name: Проверка на статуса
+        run: python run.py --status
+
+      - name: Commit и push на промените
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add -A
+          git diff --staged --quiet || git commit -m "🔄 Автоматично обновяване $(date +'%Y-%m-%d')"
+          git push
