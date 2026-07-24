@@ -8,6 +8,12 @@ import sys
 import logging
 from pathlib import Path
 
+# Windows конзолата е cp1252 по подразбиране — без това print-овете гърмят.
+try:
+    sys.stdout.reconfigure(encoding="utf-8")
+except Exception:
+    pass
+
 # Setup logging
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger(__name__)
@@ -17,29 +23,25 @@ BASE_DIR = Path(__file__).parent
 sys.path.insert(0, str(BASE_DIR))
 
 from sources import build_adapters
-from catalog.series import SERIES_CATALOG, series_by_source
+from catalog.series import SERIES_CATALOG, series_by_source, validate_catalog
+from core.primitives import apply_transform
 from core.scorer import compute_module_scores, compute_composite_score, get_regime
 
 def _build_snapshot(adapters: dict, force: bool = False) -> dict:
-    """Сглобява snapshot от всички серии."""
+    """
+    Сглобява snapshot от всички серии.
+    fetch_many сам решава кеш или мрежа по TTL (_is_stale) — затова минава
+    през него ВИНАГИ, не само при липсваща серия.
+    """
     snapshot = {}
     for source_name, adapter in adapters.items():
         specs = series_by_source(source_name)
         if not specs:
             continue
-            
-        if force:
-            results = adapter.fetch_many(specs, force=True)
-        else:
-            results = adapter.get_snapshot([s["_key"] for s in specs])
-            # Fetch missing
-            missing = [s for s in specs if s["_key"] not in results]
-            if missing:
-                new_results = adapter.fetch_many(missing, force=False)
-                results.update(new_results)
-                
+
+        results = adapter.fetch_many(specs, force=force)
         snapshot.update(results)
-        
+
     return snapshot
 
 def cmd_status(args):
@@ -63,16 +65,20 @@ def cmd_status(args):
     for module, score in module_scores.items():
         print(f"  • {module.capitalize():<10}: {score:.1f}")
         
-    print("\nПоследни данни по серии:")
+    print("\nПоследни данни по серии (след трансформацията от каталога):")
     for key, spec in SERIES_CATALOG.items():
         if key in snapshot and not snapshot[key].empty:
-            s = snapshot[key]
+            s = apply_transform(snapshot[key], spec["transform"]).dropna()
+            if s.empty:
+                print(f"  ✗ {key:<15} | {spec['name_bg']:<50} | ЛИПСВАТ ДАННИ")
+                continue
             last_date = s.index[-1].strftime("%Y-%m-%d")
             last_val = s.iloc[-1]
-            print(f"  ✓ {key:<15} | {spec['name_bg']:<45} | {last_date}: {last_val:.2f}")
+            n_raw = len(snapshot[key].dropna())
+            print(f"  ✓ {key:<15} | {spec['name_bg']:<50} | {last_date}: {last_val:>8.2f} | n={n_raw}")
         else:
-            print(f"  ✗ {key:<15} | {spec['name_bg']:<45} | ЛИПСВАТ ДАННИ")
-            
+            print(f"  ✗ {key:<15} | {spec['name_bg']:<50} | ЛИПСВАТ ДАННИ")
+
     return 0
 
 from export.weekly_briefing import generate_html
@@ -84,7 +90,14 @@ def main():
     parser.add_argument("--refresh", action="store_true", help="Форсира обновяване на данните")
     
     args = parser.parse_args()
-    
+
+    catalog_errors = validate_catalog()
+    if catalog_errors:
+        print("❌ Каталогът не е валиден:")
+        for err in catalog_errors:
+            print(f"  • {err}")
+        return 1
+
     if args.status or not any(vars(args).values()):
         return cmd_status(args)
         

@@ -14,6 +14,8 @@ on:
 
 permissions:
   contents: write
+  pages: write
+  id-token: write
 
 jobs:
   update-dashboard:
@@ -33,7 +35,12 @@ jobs:
           cache: "pip"
 
       - name: Инсталиране на зависимости
-        run: pip install -r requirements.txt
+        run: |
+          pip install -r requirements.txt
+          pip install pytest
+
+      - name: Тестове (гейт преди генерирането)
+        run: pytest -q
 
       - name: Обновяване на данните и генериране на дашборд
         run: |
@@ -53,3 +60,24 @@ jobs:
           git add -A
           git diff --staged --quiet || git commit -m "🔄 Автоматично обновяване $(date +'%Y-%m-%d')"
           git push
+
+      - name: Настройка на GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Качване на Pages артефакт
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: output
+
+  deploy:
+    needs: update-dashboard
+    runs-on: ubuntu-latest
+    name: Публикуване на дашборда в GitHub Pages
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Deploy към GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

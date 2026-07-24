@@ -11,7 +11,7 @@ from typing import Any
 ALLOWED_SOURCES = {"eurostat", "nsi", "bnb", "derived"}
 ALLOWED_REGIONS = {"BG", "EU"}
 ALLOWED_LENSES = {"labor", "inflation", "growth", "credit", "external"}
-ALLOWED_TRANSFORMS = {"level", "yoy_pct", "mom_pct", "qoq_pct", "z_score", "first_diff"}
+ALLOWED_TRANSFORMS = {"level", "yoy_pct", "mom_pct", "qoq_pct", "z_score", "first_diff", "roll4q_mean"}
 ALLOWED_SCORING_MODES = {"level", "momentum"}
 ALLOWED_SCHEDULES = {"daily", "weekly", "monthly", "quarterly", "annually"}
 
@@ -40,7 +40,7 @@ SERIES_CATALOG: dict[str, dict[str, Any]] = {
         "source": "eurostat",
         "id": "sts_inpr_m?geo=BG&nace_r2=B-D&s_adj=CA&indic_bt=PRD&unit=I21",
         "region": "BG",
-        "name_bg": "Промишлено производство (Индекс)",
+        "name_bg": "Промишлено производство (г/г)",
         "name_en": "Industrial Production Index",
         "lens": ["growth"],
         "peer_group": "production",
@@ -72,7 +72,7 @@ SERIES_CATALOG: dict[str, dict[str, Any]] = {
     },
     "BG_ESI": {
         "source": "eurostat",
-        "id": "teibs010?geo=BG",
+        "id": "ei_bssi_m_r2?geo=BG&indic=BS-ESI-I&s_adj=SA",
         "region": "BG",
         "name_bg": "Икономическо доверие (ESI)",
         "name_en": "Economic Sentiment Indicator",
@@ -93,7 +93,7 @@ SERIES_CATALOG: dict[str, dict[str, Any]] = {
     # ════════════════════════════════════════════════════════
     "BG_HICP": {
         "source": "eurostat",
-        "id": "prc_hicp_manr?geo=BG&coicop=CP00",
+        "id": "prc_hicp_minr?geo=BG&coicop18=TOTAL&unit=RCH_A",
         "region": "BG",
         "name_bg": "Инфлация (ХИПЦ, г/г)",
         "name_en": "HICP Inflation (YoY)",
@@ -110,7 +110,7 @@ SERIES_CATALOG: dict[str, dict[str, Any]] = {
     },
     "BG_HICP_CORE": {
         "source": "eurostat",
-        "id": "prc_hicp_manr?geo=BG&coicop=TOT_X_NRG_FOOD",
+        "id": "prc_hicp_minr?geo=BG&coicop18=TOT_X_NRG_FOOD&unit=RCH_A",
         "region": "BG",
         "name_bg": "Базисна инфлация (без храни и енергия, г/г)",
         "name_en": "Core HICP Inflation (YoY)",
@@ -171,12 +171,12 @@ SERIES_CATALOG: dict[str, dict[str, Any]] = {
         "source": "eurostat",
         "id": "bop_gdp6_q?geo=BG&bop_item=CA&stk_flow=BAL&partner=WRL_REST",
         "region": "BG",
-        "name_bg": "Текуща сметка (% от БВП)",
+        "name_bg": "Текуща сметка (% от БВП, 4-тримесечна плъзгаща)",
         "name_en": "Current Account to GDP",
         "lens": ["external"],
         "peer_group": "current_account",
         "tags": [],
-        "transform": "level",
+        "transform": "roll4q_mean",
         "is_rate": True,
         "historical_start": "2000-01-01",
         "release_schedule": "quarterly",

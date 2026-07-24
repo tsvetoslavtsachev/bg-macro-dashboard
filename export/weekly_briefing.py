@@ -10,6 +10,7 @@ import pandas as pd
 
 from config import MACRO_REGIMES, MODULE_WEIGHTS
 from catalog.series import SERIES_CATALOG
+from core.primitives import apply_transform
 
 
 def _score_color(score: float) -> str:
@@ -19,23 +20,56 @@ def _score_color(score: float) -> str:
     return MACRO_REGIMES[-1][2]
 
 
+def _display_series(snapshot: dict, key: str, spec: dict) -> pd.Series:
+    """
+    Серията както се ПОКАЗВА: с приложената каталожна трансформация.
+    Дисплеят и скорингът трябва да гледат едно и също число.
+    """
+    if key not in snapshot or snapshot[key].empty:
+        return pd.Series(dtype="float64")
+    return apply_transform(snapshot[key], spec.get("transform", "level")).dropna()
+
+
+def _compute_as_of(snapshot: dict) -> str | None:
+    """Най-скорошното наблюдение измежду показваните серии (YYYY-MM)."""
+    last_dates = []
+    for key, spec in SERIES_CATALOG.items():
+        s = _display_series(snapshot, key, spec)
+        if not s.empty:
+            last_dates.append(s.index[-1])
+    if not last_dates:
+        return None
+    return max(last_dates).strftime("%Y-%m")
+
+
 def _prep_chart_data(snapshot: dict) -> dict:
     chart_data = {}
+    cutoff = pd.Timestamp.now() - pd.DateOffset(years=12)
     for key, spec in SERIES_CATALOG.items():
         if key not in snapshot or snapshot[key].empty:
             continue
-        s = snapshot[key]
-        cutoff = pd.Timestamp.now() - pd.DateOffset(years=12)
-        s_recent = s[s.index >= cutoff].dropna()
+        s_raw = snapshot[key]
+        transform = spec.get("transform", "level")
+        s = _display_series(snapshot, key, spec)
+        if s.empty:
+            continue
+        s_recent = s[s.index >= cutoff]
         if s_recent.empty:
             continue
-        chart_data[key] = {
+        entry = {
             "name": spec["name_bg"],
             "dates": [d.strftime("%Y-%m-%d") for d in s_recent.index],
             "values": [round(float(v), 4) for v in s_recent.values],
             "lens": spec["lens"][0] if spec.get("lens") else "growth",
             "is_rate": spec.get("is_rate", False),
         }
+        if transform == "roll4q_mean":
+            # Суровото тримесечие остава видимо като тънка прекъсната линия.
+            raw_recent = s_raw.reindex(s_recent.index)
+            entry["values_raw"] = [
+                round(float(v), 4) if pd.notna(v) else None for v in raw_recent.values
+            ]
+        chart_data[key] = entry
     return chart_data
 
 
@@ -47,6 +81,9 @@ def generate_html(
     output_path: str,
 ):
     chart_data = _prep_chart_data(snapshot)
+    as_of = _compute_as_of(snapshot)
+    as_of_str = as_of if as_of else "няма данни"
+    generated_str = datetime.now().strftime("%d.%m.%Y")
 
     # ── Latest values table ──────────────────────────────────────────────────
     rows_html = ""
@@ -58,7 +95,7 @@ def generate_html(
                 <td>—</td><td>—</td><td>—</td><td style="color:#888">Липсват данни</td>
             </tr>"""
             continue
-        s = snapshot[key].dropna()
+        s = _display_series(snapshot, key, spec)
         if s.empty:
             continue
         last_val = s.iloc[-1]
@@ -194,7 +231,7 @@ def generate_html(
       <div class="sub">Данни от НСИ и БНБ (чрез Eurostat) · Автоматично обновяване</div>
     </div>
     <div class="header-right">
-      <div class="updated">Обновено: {datetime.now().strftime("%d.%m.%Y %H:%M")}</div>
+      <div class="updated">Генериран {generated_str} · Данни към {as_of_str}</div>
     </div>
   </div>
 
@@ -247,7 +284,7 @@ def generate_html(
 
 <footer>
   Данните са от <a href="https://ec.europa.eu/eurostat" target="_blank">Eurostat</a> (НСИ и БНБ репортинг) ·
-  Дашборд генериран автоматично ·
+  Генериран {generated_str} · Данни към {as_of_str} ·
   <a href="https://github.com/tsvetoslavtsachev/bg-macro-dashboard" target="_blank">GitHub</a>
 </footer>
 
@@ -311,12 +348,29 @@ function showChart(key) {{
     y: data.values,
     type: "scatter",
     mode: "lines",
+    name: data.name,
     line: {{ color: color, width: 2.5 }},
     fill: "tozeroy",
     fillcolor: fillColor,
     hovertemplate: "%{{x|%b %Y}}: <b>%{{y:.2f}}</b><extra></extra>"
   }};
-  
+
+  const traces = [trace];
+
+  // Суровото тримесечие под плъзгащата средна
+  if (data.values_raw) {{
+    traces.push({{
+      x: data.dates,
+      y: data.values_raw,
+      type: "scatter",
+      mode: "lines",
+      name: "тримесечно",
+      line: {{ color: color, width: 1, dash: "dash" }},
+      opacity: 0.4,
+      hovertemplate: "%{{x|%b %Y}} (тримесечно): <b>%{{y:.2f}}</b><extra></extra>"
+    }});
+  }}
+
   // Add zero line
   const shapes = [];
   if (data.values.some(v => v < 0)) {{
@@ -334,10 +388,12 @@ function showChart(key) {{
     xaxis: {{ showgrid: false, zeroline: false, color: "#8892a4" }},
     yaxis: {{ gridcolor: "#1e2130", zerolinecolor: "#444", color: "#8892a4" }},
     shapes: shapes,
-    hovermode: "x unified"
+    hovermode: "x unified",
+    showlegend: traces.length > 1,
+    legend: {{ orientation: "h", y: 1.12, x: 0 }}
   }};
-  
-  Plotly.react("main-chart", [trace], layout, {{displayModeBar: false, responsive: true}});
+
+  Plotly.react("main-chart", traces, layout, {{displayModeBar: false, responsive: true}});
   activeKey = key;
 }}
 
@@ -379,53 +435,6 @@ function showChart(key) {{
 // Auto-show first chart
 const firstKey = Object.keys(CHART_DATA)[0];
 if (firstKey) showChart(firstKey);
-
-// Row click handler
-function showChart(key) {{
-  if (!CHART_DATA[key]) return;
-  
-  document.querySelectorAll(".chart-btn").forEach(b => b.classList.remove("active"));
-  const btn = document.querySelector(`[data-key="${{key}}"]`);
-  if (btn) btn.classList.add("active");
-  
-  const data = CHART_DATA[key];
-  const color = LENS_COLORS[data.lens] || "#7c6af7";
-  const fillColor = LENS_BG[data.lens] || "rgba(124,106,247,0.08)";
-  
-  document.getElementById("chart-title").textContent = data.name;
-  
-  const trace = {{
-    x: data.dates,
-    y: data.values,
-    type: "scatter",
-    mode: "lines",
-    line: {{ color: color, width: 2.5 }},
-    fill: "tozeroy",
-    fillcolor: fillColor,
-    hovertemplate: "%{{x|%b %Y}}: <b>%{{y:.2f}}</b><extra></extra>"
-  }};
-  
-  const shapes = [];
-  if (data.values.some(v => v < 0)) {{
-    shapes.push({{
-      type: "line", x0: data.dates[0], x1: data.dates[data.dates.length-1],
-      y0: 0, y1: 0, line: {{ color: "#555", width: 1, dash: "dot" }}
-    }});
-  }}
-  
-  const layout = {{
-    paper_bgcolor: "rgba(0,0,0,0)",
-    plot_bgcolor: "rgba(0,0,0,0)",
-    font: {{ color: "#8892a4", family: "-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif" }},
-    margin: {{ t: 10, r: 20, b: 40, l: 50 }},
-    xaxis: {{ showgrid: false, zeroline: false, color: "#8892a4" }},
-    yaxis: {{ gridcolor: "#1e2130", zerolinecolor: "#444", color: "#8892a4" }},
-    shapes: shapes,
-    hovermode: "x unified"
-  }};
-  
-  Plotly.react("main-chart", [trace], layout, {{displayModeBar: false, responsive: true}});
-}}
 </script>
 </body>
 </html>

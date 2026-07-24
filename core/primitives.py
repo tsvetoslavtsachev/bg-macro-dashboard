@@ -39,6 +39,14 @@ def compute_qoq_pct(series: pd.Series) -> pd.Series:
     """Изчислява Quarter-over-Quarter процентно изменение."""
     return series.pct_change(periods=1) * 100.0
 
+def compute_roll4q_mean(series: pd.Series) -> pd.Series:
+    """
+    4-тримесечна плъзгаща средна.
+    Конвенционалният прочит за съотношения като текуща сметка / БВП —
+    изглажда тримесечната сезонност, без да маскира тренда.
+    """
+    return series.rolling(4).mean()
+
 def compute_z_score(series: pd.Series, window: int = None) -> pd.Series:
     """Изчислява Z-score (ролиращ или върху цялата серия)."""
     if window:
@@ -65,6 +73,8 @@ def apply_transform(series: pd.Series, transform: str) -> pd.Series:
         return compute_mom_pct(series)
     elif transform == "qoq_pct":
         return compute_qoq_pct(series)
+    elif transform == "roll4q_mean":
+        return compute_roll4q_mean(series)
     elif transform == "z_score":
         return compute_z_score(series)
     elif transform == "first_diff":
