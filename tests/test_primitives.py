@@ -3,14 +3,27 @@ tests/test_primitives.py
 ========================
 Математиката под трансформациите.
 """
+import numpy as np
 import pandas as pd
 import pytest
 
-from core.primitives import apply_transform, compute_roll4q_mean, compute_yoy_pct
+from core.primitives import (
+    MIN_OBS,
+    WINDOW_YEARS,
+    apply_transform,
+    compute_roll4q_mean,
+    compute_yoy_pct,
+    robust_stats_latest,
+)
 
 
 def _quarterly(values):
     idx = pd.date_range("2020-01-01", periods=len(values), freq="QS")
+    return pd.Series([float(v) for v in values], index=idx)
+
+
+def _monthly(values):
+    idx = pd.date_range(end="2026-06-01", periods=len(values), freq="MS")
     return pd.Series([float(v) for v in values], index=idx)
 
 
@@ -55,3 +68,53 @@ def test_yoy_pct_on_monthly_index_uses_twelve_periods():
 
     assert yoy.iloc[:12].isna().all()
     assert yoy.iloc[12] == pytest.approx(5.0)
+
+
+# ── Zero-base guard (порт от EU) ─────────────────────────────────────────────
+
+def test_yoy_pct_with_a_zero_base_is_undefined_not_infinite():
+    """База през 0 (съотношение/спред) → ±inf беше фалшив вечен екстремум."""
+    s = _quarterly([0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0])
+    yoy = compute_yoy_pct(s)
+
+    assert np.isnan(yoy.iloc[4])              # 4.0 спрямо база 0.0
+    assert not np.isinf(yoy.to_numpy()).any()
+
+
+def test_qoq_pct_also_guards_the_zero_base():
+    s = _quarterly([0.0, 5.0, 10.0])
+    assert np.isnan(apply_transform(s, "qoq_pct").iloc[1])
+
+
+# ── Робастна норма ───────────────────────────────────────────────────────────
+
+def test_robust_stats_returns_latest_median_and_mad_scale():
+    s = _monthly([1.0, 3.0] * 60 + [2.0])
+    val, med, scale = robust_stats_latest(s)
+
+    assert val == pytest.approx(2.0)
+    assert med == pytest.approx(2.0)
+    assert scale == pytest.approx(1.4826)     # MAD = 1 → 1.4826·MAD
+
+
+def test_robust_stats_window_is_the_last_ten_years():
+    """Старият режим стои извън прозореца и не мести нормата."""
+    s = _monthly([50.0] * 200 + [1.0, 3.0] * 60 + [2.0])
+    _, med, _ = robust_stats_latest(s)
+    assert med == pytest.approx(2.0)
+
+
+def test_robust_stats_needs_enough_observations():
+    assert robust_stats_latest(_monthly([1.0] * (MIN_OBS - 1))) is None
+    assert robust_stats_latest(_monthly([1.0, 3.0] * MIN_OBS)) is not None
+
+
+def test_robust_stats_reports_zero_scale_for_a_pinned_series():
+    """MAD=0 не се крие — викащият решава (scale_fallback / degenerate)."""
+    _, _, scale = robust_stats_latest(_monthly([7.0] * 200))
+    assert scale == pytest.approx(0.0)
+
+
+def test_family_constants_are_the_documented_ones():
+    assert WINDOW_YEARS == 10
+    assert MIN_OBS == 36

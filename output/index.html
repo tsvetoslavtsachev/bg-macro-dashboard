@@ -30,7 +30,22 @@
   .regime-score-big { font-size:4em; font-weight:800; color:#ff6d00; line-height:1; }
   .regime-label { font-size:1.5em; font-weight:600; color:#ff6d00; }
   .regime-desc { color:var(--muted); font-size:0.9em; margin-top:6px; max-width:500px; }
-  
+  .verdict { font-size:1.05em; font-weight:600; color:var(--text); margin-top:10px; max-width:560px; line-height:1.45; }
+
+  /* Методология */
+  .methodology { background:var(--card); border:1px solid var(--border); border-radius:12px;
+                  padding:18px 24px; margin-bottom:30px; }
+  .methodology summary { cursor:pointer; font-weight:600; font-size:0.95em; }
+  .methodology h4 { font-size:0.85em; text-transform:uppercase; letter-spacing:0.6px;
+                     color:var(--accent); margin:16px 0 4px; }
+  .methodology p { color:var(--muted); font-size:0.87em; line-height:1.55; }
+  .methodology code { background:#252836; padding:1px 5px; border-radius:4px; font-size:0.92em; }
+
+  /* Индикаторни имена + застояли наблюдения */
+  .ind-name a { border-bottom:1px dotted rgba(124,106,247,0.5); }
+  .ind-name a:hover { border-bottom-color:var(--accent); }
+  .stale { color:#ff9800; cursor:help; }
+
   /* Module bars */
   .modules-card { background:var(--card); border-radius:12px; padding:24px; margin-bottom:30px; border:1px solid var(--border); }
   .modules-card h2 { margin-bottom:20px; font-size:1.1em; color:var(--muted); text-transform:uppercase; letter-spacing:1px; }
@@ -93,18 +108,63 @@
   <!-- Regime Hero -->
   <div class="regime-hero">
     <div>
-      <div class="regime-score-big">44.0</div>
+      <div class="regime-score-big">36.3</div>
       <div style="color:var(--muted); font-size:0.8em; margin-top:4px;">от 100</div>
     </div>
     <div>
       <div class="regime-label">ВЛОШАВАЩ СЕ</div>
+      <div class="verdict">Тежи външният сектор (4.4), крепи пазарът на труда (67.4).</div>
       <div class="regime-desc">
-        Композитен макроикономически резултат за България, изчислен на база
-        10 ключови индикатора от Eurostat (НСИ и БНБ данни).
-        Скорът отразява текущото положение спрямо историческото разпределение от 2000г.
+        Композитен макроикономически резултат за България по 10 ключови
+        индикатора от Eurostat (НСИ и БНБ данни). 50 = близката 10-годишна норма;
+        по-високо = по-здраво.
       </div>
     </div>
   </div>
+
+  <!-- Методология (ФОРМА-КАНОН: обяснението стои при уреда, не в друг документ) -->
+  <details class="methodology" open>
+    <summary>Как да четеш този дашборд</summary>
+
+    <h4>Скалата 0–100</h4>
+    <p>
+      Всяка серия се сравнява със СОБСТВЕНАТА си близка норма — медианата на
+      последните 10 години, а разсейването се мери робастно
+      (<code>1.4826 · MAD</code>, за да не разтяга скалата един извънреден месец).
+      Полученото отклонение минава през <code>score = 50·(1 + tanh(z/2))</code>:
+      <b>50 = нормалното за България напоследък</b>, ±2σ ≈ 88 / 12. Числото е
+      описателно (къде сме), не прогнозно.
+    </p>
+
+    <h4>Инфлацията се мери като отклонение от 2%</h4>
+    <p>
+      Не „ниско = добре" — иначе дефлацията би излизала отличник. Здравето е
+      максимално при целта на ЕЦБ (2%) и пада симетрично в двете посоки
+      (U-форма). България е в еврозоната от 01.01.2026 → същият център като EA.
+    </p>
+
+    <h4>Текущата сметка е 4-тримесечна плъзгаща</h4>
+    <p>
+      Конвенционалният прочит за съотношения спрямо БВП. Суровото тримесечие е
+      чувствително по-волатилно и остава на графиката като тънка прекъсната
+      линия, но скорът и таблицата четат плъзгащата.
+    </p>
+
+    <h4>Композитът</h4>
+    <p>
+      Претеглена средна на петте лещи (инфлация 25% · пазар на труда 20% · растеж 20% · кредит и финанси 15% · външен сектор 20%). Леща без данни ИЗПАДА и
+      теглата се преизчисляват — не се брои като „неутрално 50".
+    </p>
+
+    <h4>As-of дисциплина</h4>
+    <p>
+      „Данни към" е най-скорошното НАБЛЮДЕНИЕ, не времето на генериране. Всеки
+      ред показва своя период; <span class="stale">⚠</span> означава наблюдение
+      по-старо от двойния очакван ритъм на публикуване (месечни &gt; 2 месеца,
+      тримесечни &gt; 6 месеца). Имената на индикаторите водят към набора в
+      Eurostat databrowser.
+    </p>
+  </details>
 
   <!-- Module Bars -->
   <div class="modules-card">
@@ -113,37 +173,37 @@
         <div class="mod-row">
             <div class="mod-label">Инфлация</div>
             <div class="mod-bar-wrap">
-                <div class="mod-bar" style="width:34.1%; background:#d50000"></div>
+                <div class="mod-bar" style="width:34.8%; background:#d50000"></div>
             </div>
-            <div class="mod-score" style="color:#d50000">34.1</div>
+            <div class="mod-score" style="color:#d50000">34.8</div>
         </div>
         <div class="mod-row">
             <div class="mod-label">Пазар на труда</div>
             <div class="mod-bar-wrap">
-                <div class="mod-bar" style="width:83.0%; background:#00c853"></div>
+                <div class="mod-bar" style="width:67.4%; background:#69f0ae"></div>
             </div>
-            <div class="mod-score" style="color:#00c853">83.0</div>
+            <div class="mod-score" style="color:#69f0ae">67.4</div>
         </div>
         <div class="mod-row">
             <div class="mod-label">Растеж</div>
             <div class="mod-bar-wrap">
-                <div class="mod-bar" style="width:45.1%; background:#ff6d00"></div>
+                <div class="mod-bar" style="width:47.1%; background:#ff6d00"></div>
             </div>
-            <div class="mod-score" style="color:#ff6d00">45.1</div>
+            <div class="mod-score" style="color:#ff6d00">47.1</div>
         </div>
         <div class="mod-row">
-            <div class="mod-label">Кредит & Финанси</div>
+            <div class="mod-label">Кредит и финанси</div>
             <div class="mod-bar-wrap">
-                <div class="mod-bar" style="width:38.3%; background:#ff6d00"></div>
+                <div class="mod-bar" style="width:25.4%; background:#d50000"></div>
             </div>
-            <div class="mod-score" style="color:#ff6d00">38.3</div>
+            <div class="mod-score" style="color:#d50000">25.4</div>
         </div>
         <div class="mod-row">
             <div class="mod-label">Външен сектор</div>
             <div class="mod-bar-wrap">
-                <div class="mod-bar" style="width:20.6%; background:#d50000"></div>
+                <div class="mod-bar" style="width:4.4%; background:#d50000"></div>
             </div>
-            <div class="mod-score" style="color:#d50000">20.6</div>
+            <div class="mod-score" style="color:#d50000">4.4</div>
         </div>
   </div>
 
@@ -152,77 +212,87 @@
     <div class="card">
       <h2>Последни стойности</h2>
       <table>
-        <thead><tr><th>Индикатор</th><th>Тип</th><th>Период</th><th>Стойност</th><th>Δ</th></tr></thead>
+        <thead><tr><th>Индикатор</th><th>Леща</th><th>Период</th><th>Стойност</th><th>Δ</th><th>Score</th></tr></thead>
         <tbody>
             <tr onclick="showChart('BG_GDP_YOY')" style="cursor:pointer">
-                <td>БВП (Реален растеж, г/г)</td>
-                <td><span class="lens-badge lens-growth">growth</span></td>
+                <td class="ind-name" title="Основен измерител за икономическия растеж."><a href="https://ec.europa.eu/eurostat/databrowser/view/namq_10_gdp/default/table?lang=en" target="_blank" rel="noopener" onclick="event.stopPropagation()">БВП (Реален растеж, г/г)</a></td>
+                <td><span class="lens-badge lens-growth">растеж</span></td>
                 <td>2026-01</td>
                 <td><b>3.10</b></td>
                 <td class="pos">+0.20</td>
+                <td style="color:#ffd600"><b>52.8</b></td>
             </tr>
             <tr onclick="showChart('BG_INDPRO')" style="cursor:pointer">
-                <td>Промишлено производство (г/г)</td>
-                <td><span class="lens-badge lens-growth">growth</span></td>
+                <td class="ind-name" title="Индустриалното производство е водещ индикатор за бизнес цикъла."><a href="https://ec.europa.eu/eurostat/databrowser/view/sts_inpr_m/default/table?lang=en" target="_blank" rel="noopener" onclick="event.stopPropagation()">Промишлено производство (г/г)</a></td>
+                <td><span class="lens-badge lens-growth">растеж</span></td>
                 <td>2026-05</td>
                 <td><b>-4.71</b></td>
                 <td class="neg">-0.90</td>
+                <td style="color:#d50000"><b>34.6</b></td>
             </tr>
             <tr onclick="showChart('BG_CONS')" style="cursor:pointer">
-                <td>Потребление на домакинствата (г/г)</td>
-                <td><span class="lens-badge lens-growth">growth</span></td>
+                <td class="ind-name" title="Основен двигател на българската икономика."><a href="https://ec.europa.eu/eurostat/databrowser/view/namq_10_gdp/default/table?lang=en" target="_blank" rel="noopener" onclick="event.stopPropagation()">Потребление на домакинствата (г/г)</a></td>
+                <td><span class="lens-badge lens-growth">растеж</span></td>
                 <td>2026-01</td>
                 <td><b>9.50</b></td>
                 <td class="pos">+0.40</td>
+                <td style="color:#00c853"><b>88.0</b></td>
             </tr>
             <tr onclick="showChart('BG_ESI')" style="cursor:pointer">
-                <td>Икономическо доверие (ESI)</td>
-                <td><span class="lens-badge lens-growth">growth</span></td>
+                <td class="ind-name" title="Водещ индикатор, базиран на анкети с бизнеса и потребителите."><a href="https://ec.europa.eu/eurostat/databrowser/view/ei_bssi_m_r2/default/table?lang=en" target="_blank" rel="noopener" onclick="event.stopPropagation()">Икономическо доверие (ESI)</a></td>
+                <td><span class="lens-badge lens-growth">растеж</span></td>
                 <td>2026-06</td>
                 <td><b>95.00</b></td>
                 <td class="neg">-0.60</td>
+                <td style="color:#d50000"><b>12.7</b></td>
             </tr>
             <tr onclick="showChart('BG_HICP')" style="cursor:pointer">
-                <td>Инфлация (ХИПЦ, г/г)</td>
-                <td><span class="lens-badge lens-inflation">inflation</span></td>
+                <td class="ind-name" title="Хармонизиран индекс на потребителските цени - критерий за Еврозоната."><a href="https://ec.europa.eu/eurostat/databrowser/view/prc_hicp_minr/default/table?lang=en" target="_blank" rel="noopener" onclick="event.stopPropagation()">Инфлация (ХИПЦ, г/г)</a></td>
+                <td><span class="lens-badge lens-inflation">инфлация</span></td>
                 <td>2026-06</td>
                 <td><b>5.20</b></td>
                 <td class="neg">-1.10</td>
+                <td style="color:#d50000"><b>34.1</b></td>
             </tr>
             <tr onclick="showChart('BG_HICP_CORE')" style="cursor:pointer">
-                <td>Базисна инфлация (без храни и енергия, г/г)</td>
-                <td><span class="lens-badge lens-inflation">inflation</span></td>
+                <td class="ind-name" title="Показва устойчивия инфлационен натиск."><a href="https://ec.europa.eu/eurostat/databrowser/view/prc_hicp_minr/default/table?lang=en" target="_blank" rel="noopener" onclick="event.stopPropagation()">Базисна инфлация (без храни и енергия, г/г)</a></td>
+                <td><span class="lens-badge lens-inflation">инфлация</span></td>
                 <td>2026-06</td>
                 <td><b>4.60</b></td>
                 <td class="neg">-0.30</td>
+                <td style="color:#ff6d00"><b>35.6</b></td>
             </tr>
             <tr onclick="showChart('BG_UNRATE')" style="cursor:pointer">
-                <td>Безработица (%)</td>
-                <td><span class="lens-badge lens-labor">labor</span></td>
+                <td class="ind-name" title="Изоставащ индикатор, но ключов за здравето на икономиката."><a href="https://ec.europa.eu/eurostat/databrowser/view/une_rt_m/default/table?lang=en" target="_blank" rel="noopener" onclick="event.stopPropagation()">Безработица (%)</a></td>
+                <td><span class="lens-badge lens-labor">труд</span></td>
                 <td>2026-05</td>
                 <td><b>2.90</b></td>
                 <td class="pos">+0.10</td>
+                <td style="color:#69f0ae"><b>78.4</b></td>
             </tr>
             <tr onclick="showChart('BG_WAGES')" style="cursor:pointer">
-                <td>Компенсация на наетите (Растеж, г/г)</td>
-                <td><span class="lens-badge lens-labor">labor</span></td>
+                <td class="ind-name" title="Растежът на заплатите е основен двигател на инфлацията в услугите."><a href="https://ec.europa.eu/eurostat/databrowser/view/namq_10_a10/default/table?lang=en" target="_blank" rel="noopener" onclick="event.stopPropagation()">Компенсация на наетите (Растеж, г/г)</a></td>
+                <td><span class="lens-badge lens-labor">труд</span></td>
                 <td>2026-01</td>
                 <td><b>11.50</b></td>
                 <td class="neg">-1.28</td>
+                <td style="color:#ffd600"><b>54.1</b></td>
             </tr>
             <tr onclick="showChart('BG_CA_GDP')" style="cursor:pointer">
-                <td>Текуща сметка (% от БВП, 4-тримесечна плъзгаща)</td>
-                <td><span class="lens-badge lens-external">external</span></td>
+                <td class="ind-name" title="Показва външните дисбаланси на икономиката."><a href="https://ec.europa.eu/eurostat/databrowser/view/bop_gdp6_q/default/table?lang=en" target="_blank" rel="noopener" onclick="event.stopPropagation()">Текуща сметка (% от БВП, 4-тримесечна плъзгаща)</a></td>
+                <td><span class="lens-badge lens-external">външен</span></td>
                 <td>2026-01</td>
                 <td><b>-6.55</b></td>
                 <td class="neg">-1.10</td>
+                <td style="color:#d50000"><b>4.4</b></td>
             </tr>
             <tr onclick="showChart('BG_LT_RATE')" style="cursor:pointer">
-                <td>Дългосрочен лихвен процент (10г ДЦК)</td>
-                <td><span class="lens-badge lens-credit">credit</span></td>
+                <td class="ind-name" title="Критерий от Маастрихт за конвергенция. Отразява цената на държавния дълг."><a href="https://ec.europa.eu/eurostat/databrowser/view/irt_lt_mcby_m/default/table?lang=en" target="_blank" rel="noopener" onclick="event.stopPropagation()">Дългосрочен лихвен процент (10г ДЦК)</a></td>
+                <td><span class="lens-badge lens-credit">кредит</span></td>
                 <td>2026-06</td>
                 <td><b>4.09</b></td>
                 <td class="">0.00</td>
+                <td style="color:#d50000"><b>25.4</b></td>
             </tr></tbody>
       </table>
     </div>
@@ -267,14 +337,9 @@ const LENS_BG = {
   external:  "rgba(52,211,153,0.08)"
 };
 
-const MODULE_SCORES = {"inflation": 34.119496855345915, "labor": 83.01058812505858, "growth": 45.14055204512983, "credit": 38.297872340425535, "external": 20.588235294117645};
-const BG_NAMES = {
-  growth: "Растеж",
-  inflation: "Инфлация",
-  labor: "Пазар на труда",
-  credit: "Кредит",
-  external: "Външен сектор"
-};
+const MODULE_SCORES = {"inflation": 34.8, "labor": 67.4, "growth": 47.1, "credit": 25.4, "external": 4.4};
+// Един речник — същите имена като модул-баровете и briefing_context (config.py)
+const BG_NAMES = {"growth": "Растеж", "inflation": "Инфлация", "labor": "Пазар на труда", "credit": "Кредит и финанси", "external": "Външен сектор"};
 
 // Build chart selector buttons
 const selector = document.getElementById("chart-selector");
@@ -359,12 +424,15 @@ function showChart(key) {
 
 // Radar chart
 (function() {
-  const categories = Object.keys(MODULE_SCORES).map(k => BG_NAMES[k] || k);
-  const values = Object.values(MODULE_SCORES);
+  // Леща без данни (null) изпада от радара — не се рисува като „неутрално 50"
+  const entries = Object.entries(MODULE_SCORES).filter(([, v]) => v !== null);
+  if (!entries.length) return;
+  const categories = entries.map(([k]) => BG_NAMES[k] || k);
+  const values = entries.map(([, v]) => v);
   // Close the polygon
   const cats = [...categories, categories[0]];
   const vals = [...values, values[0]];
-  
+
   const trace = {
     type: "scatterpolar",
     r: vals,

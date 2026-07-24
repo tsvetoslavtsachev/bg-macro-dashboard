@@ -5,21 +5,25 @@
 ## Архитектура
 
 ```
-catalog/series.py       → Каталог от 10+ серии с metadata
-catalog/polarity.py     → Посока на сериите (висок = добре/зле)
+catalog/series.py       → Каталог от 10 серии с metadata
+catalog/polarity.py     → Полярност: +1 / −1 / ("U","target",X)
 sources/eurostat_adapter.py → Eurostat JSON-stat 2.0 клиент с кеш
-core/primitives.py      → YoY, MoM, Z-score трансформации
-core/scorer.py          → Percentile scoring и composite score
+core/primitives.py      → трансформации + robust_stats_latest (median/MAD)
+core/scorer.py          → робастен z scoring, лещова агрегация, композит
+core/display.py         → ФОРМА-КАНОН примитиви (линк, стойност, staleness, извод)
 export/weekly_briefing.py → HTML дашборд с Plotly.js
+export/briefing_context.py → Markdown context за LLM (--export-context)
 run.py                  → CLI entry point
 ```
 
 ## Добавяне на нова серия
 
 1. Намери Eurostat dataset ID (напр. `sts_inpr_m?geo=BG&...`)
-2. Добави в `catalog/series.py` → `SERIES_CATALOG`
-3. Ако е "обратна" серия (висок = зле), добави в `catalog/polarity.py` → `INVERTED_SERIES`
-4. Тествай: `python run.py --status --refresh`
+2. Добави в `catalog/series.py` → `SERIES_CATALOG` (задължително `lens`,
+   `peer_group`, `transform`, `narrative_hint`)
+3. Добави **изричен** запис в `catalog/polarity.py` → `POLARITY`
+   (`test_every_catalog_series_has_an_explicit_polarity` пази това)
+4. Тествай: `python run.py --status --refresh` + `pytest -q`
 
 ## Eurostat API
 
@@ -29,12 +33,22 @@ run.py                  → CLI entry point
 
 ## Composite Score логика
 
-1. Всяка серия се трансформира (level / yoy_pct / z_score)
-2. Изчислява се percentile rank спрямо историята от 2000г
-3. Ако серията е "обратна", скорът = 100 - percentile
-4. Серии се групират по lens (growth, inflation, labor, credit, external)
-5. Lens score = средно от сериите в лещата
-6. Composite = weighted average с тегла от `config.py`
+Фамилният примитив (същият като us / eu / china) — реф.
+`dashboards/macro-satellite/LENS_SCORING_METHODOLOGY.md`:
+
+1. Каталожна трансформация (`level` / `yoy_pct` / `roll4q_mean`) ПРЕДИ скоринга
+2. Робастен z спрямо плъзгащ **10-годишен** прозорец:
+   `z = (x − median₁₀) / (1.4826 · MAD₁₀)`, `MIN_OBS = 36`
+3. Полярност → health-z: `+1` / `−1` / U-форма около 2% за инфлацията
+   (`U_BAND = 1.0`, `z_h = U_BAND − |z_dev|`)
+4. `score = 50 · (1 + tanh(z_h / 2))` — **50 = близката норма**
+5. Серия → peer-група (средно) → леща (претеглено; всички тегла 1.0)
+6. Composite = weighted average по `MODULE_WEIGHTS`, **ренормализиран** —
+   леща без данни изпада, не се брои като 50
+
+**Пазачи:** `MAD = 0` в прозореца → норма от пълната история с клип ±6σ
+(`scale_fallback`); без вариация и там → `degenerate` (неутрално + флаг).
+Percentile остава в изхода само като второстепенен контекст.
 
 ## Тегла (config.py)
 

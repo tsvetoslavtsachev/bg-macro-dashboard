@@ -2,8 +2,9 @@ name: Седмично обновяване на данните
 
 on:
   schedule:
-    # Всяка неделя в 06:00 UTC (09:00 Sofia time)
-    - cron: "0 6 * * 0"
+    # Всеки понеделник в 06:00 UTC (09:00 Sofia time) — изравнено с фамилията
+    # на макро дашбордите (us / eu / china).
+    - cron: "0 6 * * 1"
   workflow_dispatch:
     inputs:
       force_refresh:
@@ -49,6 +50,9 @@ jobs:
           else
             python run.py --briefing
           fi
+
+      - name: Context export за LLM анализ
+        run: python run.py --export-context
 
       - name: Проверка на статуса
         run: python run.py --status

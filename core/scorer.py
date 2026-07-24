@@ -1,106 +1,341 @@
 """
 core/scorer.py
 ==============
-Изчислява макроикономически резултати (scores) от времеви редове.
+Робастният lens scoring двигател на българската макро повърхност.
+
+Портнат от `dashboards/eu-macro-dashboard` (core/scorer.py + analysis/health.py);
+референтният документ на фамилията е
+`dashboards/macro-satellite/LENS_SCORING_METHODOLOGY.md`.
+
+Веригата (един примитив, локална норма):
+  1. каталожна трансформация  → темп вместо ниво за номиналните серии
+  2. робастен z спрямо ПЛЪЗГАЩ 10-г. прозорец:
+         z = (x − median₁₀) / (1.4826 · MAD₁₀)
+  3. полярност → health-z (по-високо = по-здраво; U-форма около целта за инфлацията)
+  4. score = 50 · (1 + tanh(z_h / 2))   → 50 = близката норма; ±2σ ≈ 88/12
+  5. серия → peer-група (средно) → леща (претеглено) → композит (MODULE_WEIGHTS,
+     с ренормализация: празна леща ИЗПАДА, не се брои като „неутрално 50")
+
+Заменя percentile-of-full-history: номинално дрейфаща серия вече не се съди
+спрямо 2000г., а спрямо собствената си близка норма.
+
+ВАЖНО: скалата НЕ е сравнима 1:1 със стария percentile композит; сравнима е с
+us/eu/china-macro-dashboard (същият примитив).
 """
 from __future__ import annotations
+
+import math
+from collections import defaultdict
+from typing import Any, Optional
+
 import numpy as np
 import pandas as pd
 
 from config import MACRO_REGIMES, MODULE_WEIGHTS, HISTORY_START
-from catalog.polarity import polarity_for
-from core.primitives import apply_transform
+from catalog.polarity import polarity_for, peer_group_weight, U_BAND, is_u_shaped
+from core.primitives import (
+    MIN_OBS,
+    WINDOW_YEARS,
+    apply_transform,
+    robust_stats_latest,
+)
 
-def get_percentile_score(series: pd.Series, value: float, invert: bool = False) -> float:
-    """Изчислява percentile rank на стойност спрямо историческия ред."""
-    if series.empty or pd.isna(value):
-        return 50.0
-        
-    # Изчистване на NaN
-    clean_series = series.dropna()
-    if len(clean_series) < 5:
-        return 50.0
-        
-    pct = (clean_series < value).mean() * 100.0
-    
-    if invert:
-        pct = 100.0 - pct
-        
-    return pct
+# ── константи на фамилията (синхронни с EU core/scorer.py) ───────────────────
+TANH_SLOPE = 2.0        # score = 50·(1+tanh(z_h/SLOPE)); ±2σ ≈ 88/12
+CLIP_SIGMA = 6.0        # клип при scale_fallback (пълна история вместо 10г)
+PCT_TRANSFORMS = {"yoy_pct", "mom_pct", "qoq_pct"}
 
-def score_series(s_raw: pd.Series, transform: str, invert: bool) -> dict:
-    """Трансформира и скорира една серия."""
-    if s_raw.empty:
-        return {"score": 50.0, "value": None, "z_score": 0.0}
-        
-    # Филтрираме по HISTORY_START
-    s = s_raw[s_raw.index >= pd.Timestamp(HISTORY_START)]
-    if s.empty:
-        s = s_raw  # Fallback към цялата история
-        
-    s_transformed = apply_transform(s, transform)
-    s_clean = s_transformed.dropna()
-    
-    if s_clean.empty:
-        return {"score": 50.0, "value": None, "z_score": 0.0}
-        
-    latest_val = s_clean.iloc[-1]
-    score = get_percentile_score(s_clean, latest_val, invert)
-    
-    # Z-score за допълнителен контекст
-    mean = s_clean.mean()
-    std = s_clean.std()
-    z = (latest_val - mean) / std if std > 0 else 0.0
-    if invert:
-        z = -z
-        
+
+# ═════════════════════════════════════════════════════════════════════════════
+# СЕРИЯ → SCORE
+# ═════════════════════════════════════════════════════════════════════════════
+
+def percentile_rank(current: float, history: pd.Series) -> float:
+    """% от историческите стойности по-ниски от текущата (0..100).
+
+    Второстепенен контекст — заглавният score идва от робастния z, не оттук.
+    """
+    if len(history) == 0:
+        return 50.0
+    return float(np.sum(history < current) / len(history) * 100)
+
+
+def _health_z(val: float, med: float, scale: float, polarity: Any) -> float:
+    """Робастен z → health-z (по-високо = по-здраво)."""
+    if is_u_shaped(polarity):
+        if scale == 0 or np.isnan(scale):
+            return float(U_BAND)
+        center = float(polarity[2]) if polarity[1] == "target" else med
+        return float(U_BAND - abs((val - center) / scale))
+    if scale == 0 or np.isnan(scale):
+        return 0.0  # без вариация → на нормата
+    z_raw = (val - med) / scale
+    sign = float(polarity) if polarity in (1, -1, +1) else 1.0
+    return float(sign * z_raw)
+
+
+def _trailing_window(s: pd.Series, window_years: int) -> pd.Series:
+    """Последните window_years години (ДО последната точка)."""
+    if isinstance(s.index, pd.DatetimeIndex) and len(s):
+        cutoff = s.index[-1] - pd.DateOffset(years=window_years)
+        return s[s.index >= cutoff]
+    return s
+
+
+def _polarity_repr(polarity: Any) -> str:
+    """Стрингов repr (избягва tuple в JSON/HTML)."""
+    if is_u_shaped(polarity):
+        return f"U:{polarity[1]}" + (f"={polarity[2]}" if polarity[1] == "target" else "")
+    return f"{polarity:+d}" if polarity in (1, -1, +1) else str(polarity)
+
+
+def _empty_score(name: str) -> dict:
     return {
-        "score": float(score),
-        "value": float(latest_val),
-        "z_score": float(z),
-        "last_date": s_clean.index[-1].strftime("%Y-%m-%d")
+        "name": name,
+        "score": None,
+        "health_z": None,
+        "percentile": None,
+        "percentile_window": None,
+        "z_raw": None,
+        "value": None,
+        "display_value": None,
+        "display_is_pct": False,
+        "last_date": None,
+        "transform": "level",
+        "polarity": "+1",
+        "history_n": 0,
+        "scale_fallback": False,
+        "degenerate": True,
     }
 
-def compute_module_scores(catalog: dict, snapshot: dict[str, pd.Series]) -> dict:
-    """Изчислява score за всяка леща (module)."""
-    lens_scores = {l: [] for l in MODULE_WEIGHTS.keys()}
-    
+
+def score_series(
+    s_raw: pd.Series,
+    transform: str = "level",
+    polarity: Any = +1,
+    name: str = "",
+    *,
+    window_years: int = WINDOW_YEARS,
+    min_obs: int = MIN_OBS,
+    history_start: str = HISTORY_START,
+) -> dict:
+    """Сурова серия → health score dict (робастен z спрямо плъзгащ 10-г. прозорец).
+
+    score 50 = близката норма; >50 по-здраво, <50 по-зле (полярностно ориентирано).
+    Трансформацията от каталога се прилага ПРЕДИ скоринга.
+    """
+    if s_raw is None or s_raw.dropna().empty:
+        return _empty_score(name)
+
+    # HISTORY_START отрязва хиперинфлацията 1997 и предборд-периода (config)
+    s = s_raw[s_raw.index >= pd.Timestamp(history_start)] if history_start else s_raw
+    if s.dropna().empty:
+        s = s_raw
+
+    transformed = apply_transform(s, transform).dropna()
+    is_pct = transform in PCT_TRANSFORMS
+    if transformed.empty:      # серия твърде къса за трансформацията → сурово ниво
+        transformed = s.dropna()
+        is_pct = False
+    if transformed.empty:
+        return _empty_score(name)
+
+    scored_val = float(transformed.iloc[-1])
+    last_date = (
+        transformed.index[-1].strftime("%Y-%m-%d")
+        if isinstance(transformed.index, pd.DatetimeIndex)
+        else str(transformed.index[-1])
+    )
+
+    stats = robust_stats_latest(transformed, window_years=window_years, min_obs=min_obs)
+    used_window = window_years
+    if stats is None:          # твърде къса за 10-г. норма → пълна история
+        stats = robust_stats_latest(transformed, window_years=200, min_obs=12)
+        used_window = 200
+
+    if stats is None:          # твърде къса дори за fallback → неутрално
+        out = _empty_score(name)
+        out.update({
+            "score": 50.0, "health_z": 0.0, "percentile": 50.0,
+            "percentile_window": "пълна история",
+            "value": scored_val, "display_value": round(scored_val, 4),
+            "display_is_pct": is_pct, "last_date": last_date,
+            "transform": transform, "polarity": _polarity_repr(polarity),
+            "history_n": len(transformed),
+        })
+        return out
+
+    val, med, scale = stats
+
+    # ── Каноничен degenerate guard (единен US/EU/CN) ─────────────────────────
+    # MAD=0 в 10-г. прозорец (административно пиннати серии) → scale=0 → фалшиво
+    # „неутрално 50" при реален всеисторически екстремум. Fallback: норма от
+    # ПЪЛНАТА история; ако и тя е константа → degenerate (неутрално + флаг).
+    win = _trailing_window(transformed, used_window)
+    scale_fallback = False
+    if (scale == 0 or np.isnan(scale)) and len(transformed) > len(win):
+        med_f = float(transformed.median())
+        mad_f = float((transformed - med_f).abs().median())
+        scale_f = 1.4826 * mad_f
+        if scale_f > 0 and not np.isnan(scale_f):
+            med, scale = med_f, scale_f
+            scale_fallback = True
+            win = transformed
+    degenerate = bool(scale == 0 or np.isnan(scale))
+
+    if degenerate:
+        hz = 0.0
+        z_raw = 0.0
+    else:
+        hz = _health_z(val, med, scale, polarity)
+        z_raw = (val - med) / scale
+        if scale_fallback:
+            hz = float(np.clip(hz, -CLIP_SIGMA, CLIP_SIGMA))
+            z_raw = float(np.clip(z_raw, -CLIP_SIGMA, CLIP_SIGMA))
+
+    score = round(50.0 * (1.0 + math.tanh(hz / TANH_SLOPE)), 1)
+    percentile_window = (
+        "пълна история" if (scale_fallback or used_window != window_years) else f"{window_years}г"
+    )
+
+    return {
+        "name": name or (s_raw.name or "unknown"),
+        "score": score,
+        "health_z": round(float(hz), 3),
+        "percentile": round(percentile_rank(scored_val, win), 1),
+        "percentile_window": percentile_window,
+        "z_raw": round(float(z_raw), 3),
+        "value": scored_val,
+        "display_value": round(scored_val, 4),
+        "display_is_pct": is_pct,
+        "last_date": last_date,
+        "transform": transform,
+        "polarity": _polarity_repr(polarity),
+        "history_n": len(win),
+        "scale_fallback": scale_fallback,
+        "degenerate": degenerate,
+    }
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# ЛЕЩОВА АГРЕГАЦИЯ
+# ═════════════════════════════════════════════════════════════════════════════
+
+def compute_lens_reports(catalog: dict, snapshot: dict[str, pd.Series]) -> dict[str, dict]:
+    """Серия → health-z → peer-група (средно) → леща (претеглено по peer-група).
+
+    Връща {lens: {"lens", "health_z", "score", "n_series", "series": [...],
+                  "peer_groups": [...]}}.
+    Леща без нито една скорирана серия → health_z=None, score=None (ИЗПАДА от
+    композита; НЕ се брои като „неутрално 50").
+    """
+    scored: dict[tuple[str, str], dict] = {}
+    by_lens_pg: dict[str, dict[str, list[str]]] = {
+        lens: defaultdict(list) for lens in MODULE_WEIGHTS
+    }
+    lens_members: dict[str, list[str]] = {lens: [] for lens in MODULE_WEIGHTS}
+
     for key, spec in catalog.items():
-        if key not in snapshot:
+        for lens in spec.get("lens", []):
+            if lens not in by_lens_pg:
+                continue
+            lens_members[lens].append(key)
+            pg = spec.get("peer_group") or key
+            by_lens_pg[lens][pg].append(key)
+            scored[(lens, key)] = score_series(
+                snapshot.get(key),
+                spec.get("transform", "level"),
+                polarity_for(key, lens),
+                name=key,
+            )
+
+    reports: dict[str, dict] = {}
+    for lens in MODULE_WEIGHTS:
+        pg_out: list[dict] = []
+        pg_zs: list[tuple[float, float]] = []
+
+        for pg_name in sorted(by_lens_pg[lens]):
+            zs = [
+                scored[(lens, k)]["health_z"]
+                for k in by_lens_pg[lens][pg_name]
+                if scored[(lens, k)]["health_z"] is not None
+                and not math.isnan(scored[(lens, k)]["health_z"])
+            ]
+            if not zs:
+                pg_out.append({"name": pg_name, "health_z": None, "n_available": 0, "weight": 1.0})
+                continue
+            pg_z = float(np.mean(zs))
+            w = peer_group_weight(pg_name)
+            pg_zs.append((pg_z, w))
+            pg_out.append({"name": pg_name, "health_z": round(pg_z, 3),
+                           "n_available": len(zs), "weight": w})
+
+        series_out = []
+        for key in lens_members[lens]:
+            spec = catalog[key]
+            res = dict(scored[(lens, key)])
+            res.update({
+                "key": key,
+                "name_bg": spec.get("name_bg", key),
+                "catalog_id": spec.get("id", ""),
+                "narrative_hint": spec.get("narrative_hint", ""),
+                "release_schedule": spec.get("release_schedule", "monthly"),
+                "is_rate": spec.get("is_rate", False),
+            })
+            series_out.append(res)
+
+        if not pg_zs:
+            reports[lens] = {"lens": lens, "health_z": None, "score": None,
+                             "n_series": 0, "series": series_out, "peer_groups": pg_out}
             continue
-            
-        s_raw = snapshot[key]
-        invert = not polarity_for(key)
-        
-        result = score_series(s_raw, spec["transform"], invert)
-        
-        for l in spec.get("lens", []):
-            if l in lens_scores:
-                lens_scores[l].append(result["score"])
-                
-    # Усредняваме scores във всяка леща
-    final_scores = {}
-    for l, scores in lens_scores.items():
-        if scores:
-            final_scores[l] = float(np.mean(scores))
-        else:
-            final_scores[l] = 50.0  # Неутрален
-            
-    return final_scores
 
-def compute_composite_score(module_scores: dict) -> float:
-    """Изчислява общия макро score на база теглата."""
-    total_weight = sum(MODULE_WEIGHTS.values())
-    weighted_sum = sum(module_scores.get(m, 50.0) * w for m, w in MODULE_WEIGHTS.items())
-    
-    return float(weighted_sum / total_weight)
+        wsum = sum(w for _, w in pg_zs)
+        lens_z = sum(z * w for z, w in pg_zs) / wsum if wsum else float("nan")
+        reports[lens] = {
+            "lens": lens,
+            "health_z": round(float(lens_z), 3),
+            "score": round(50.0 * (1.0 + math.tanh(lens_z / TANH_SLOPE)), 1),
+            "n_series": sum(pg["n_available"] for pg in pg_out),
+            "series": series_out,
+            "peer_groups": pg_out,
+        }
 
-def get_regime(score: float) -> dict:
-    """Връща режима според score."""
+    return reports
+
+
+def compute_module_scores(catalog: dict, snapshot: dict[str, pd.Series]) -> dict:
+    """{lens: score | None} — тънка обвивка около compute_lens_reports."""
+    return {lens: rep["score"] for lens, rep in compute_lens_reports(catalog, snapshot).items()}
+
+
+def compute_composite_score(module_scores: dict) -> Optional[float]:
+    """Претеглен композит по MODULE_WEIGHTS с РЕНОРМАЛИЗАЦИЯ.
+
+    Празна леща (score=None) изпада и теглата на останалите се преизчисляват —
+    вместо да я броим като „неутрално 50", което тихо би дърпало композита към
+    средата. Ако нито една леща няма данни → None.
+    """
+    pairs = [
+        (score, MODULE_WEIGHTS[lens])
+        for lens, score in module_scores.items()
+        if lens in MODULE_WEIGHTS and score is not None and not (
+            isinstance(score, float) and math.isnan(score)
+        )
+    ]
+    if not pairs:
+        return None
+    wsum = sum(w for _, w in pairs)
+    if wsum == 0:
+        return None
+    return round(sum(s * w for s, w in pairs) / wsum, 1)
+
+
+def get_regime(score: Optional[float]) -> dict:
+    """Режимен етикет + цвят за композитен score (фамилната таблица)."""
+    if score is None:
+        return {"name": "НЯМА ДАННИ", "color": "#8892a4", "score": None}
     for threshold, name, color in MACRO_REGIMES:
         if score >= threshold:
             return {"name": name, "color": color, "score": score}
-            
-    # Fallback
     threshold, name, color = MACRO_REGIMES[-1]
     return {"name": name, "color": color, "score": score}

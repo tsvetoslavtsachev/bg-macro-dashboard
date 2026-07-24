@@ -3,21 +3,39 @@ export/weekly_briefing.py
 =========================
 Генерира пълен интерактивен HTML дашборд за българската икономика.
 """
+import html as _html
 import json
+from datetime import date, datetime
 from pathlib import Path
-from datetime import datetime
+
 import pandas as pd
 
-from config import MACRO_REGIMES, MODULE_WEIGHTS
+from config import LENS_BADGES_BG, LENS_NAMES_BG, MACRO_REGIMES, MODULE_WEIGHTS
 from catalog.series import SERIES_CATALOG
+from core.display import databrowser_url, is_stale, stale_note, verdict_sentence
 from core.primitives import apply_transform
 
 
-def _score_color(score: float) -> str:
+def _score_color(score) -> str:
+    if score is None:
+        return "#8892a4"
     for threshold, _, color in MACRO_REGIMES:
         if score >= threshold:
             return color
     return MACRO_REGIMES[-1][2]
+
+
+def _fmt_score(score) -> str:
+    return f"{score:.1f}" if score is not None else "—"
+
+
+def _series_results(lens_reports: dict) -> dict:
+    """{key: score dict} — плоският индекс на скорираните серии."""
+    return {
+        s["key"]: s
+        for rep in lens_reports.values()
+        for s in rep.get("series", [])
+    }
 
 
 def _display_series(snapshot: dict, key: str, spec: dict) -> pd.Series:
@@ -75,31 +93,57 @@ def _prep_chart_data(snapshot: dict) -> dict:
 
 def generate_html(
     snapshot: dict,
-    module_scores: dict,
-    composite: float,
+    lens_reports: dict,
+    composite,
     regime: dict,
     output_path: str,
 ):
     chart_data = _prep_chart_data(snapshot)
     as_of = _compute_as_of(snapshot)
     as_of_str = as_of if as_of else "няма данни"
+    today = date.today()
     generated_str = datetime.now().strftime("%d.%m.%Y")
+
+    module_scores = {lens: rep.get("score") for lens, rep in lens_reports.items()}
+    results = _series_results(lens_reports)
+    verdict = verdict_sentence(lens_reports)
 
     # ── Latest values table ──────────────────────────────────────────────────
     rows_html = ""
     for key, spec in SERIES_CATALOG.items():
+        lens = spec["lens"][0] if spec.get("lens") else "growth"
+        badge = LENS_BADGES_BG.get(lens, lens)
+        hint = _html.escape(spec.get("narrative_hint", "") or "")
+        url = databrowser_url(spec.get("id", ""))
+        name_html = _html.escape(spec["name_bg"])
+        if url:
+            name_html = (
+                f'<a href="{url}" target="_blank" rel="noopener" '
+                f'onclick="event.stopPropagation()">{name_html}</a>'
+            )
+        name_cell = f'<td class="ind-name" title="{hint}">{name_html}</td>'
+
         if key not in snapshot or snapshot[key].empty:
             rows_html += f"""
             <tr>
-                <td>{spec['name_bg']}</td>
-                <td>—</td><td>—</td><td>—</td><td style="color:#888">Липсват данни</td>
+                {name_cell}
+                <td><span class="lens-badge lens-{lens}">{badge}</span></td>
+                <td>—</td><td>—</td><td>—</td>
+                <td style="color:#888">Липсват данни</td>
             </tr>"""
             continue
         s = _display_series(snapshot, key, spec)
         if s.empty:
             continue
         last_val = s.iloc[-1]
-        last_date = s.index[-1].strftime("%Y-%m")
+        last_ts = s.index[-1]
+        last_date = last_ts.strftime("%Y-%m")
+        schedule = spec.get("release_schedule", "monthly")
+        if is_stale(last_ts, schedule, today):
+            last_date = (
+                f'<span class="stale" title="{_html.escape(stale_note(schedule))}">⚠</span> '
+                f'{last_date}'
+            )
         prev_val = s.iloc[-2] if len(s) > 1 else None
         delta = last_val - prev_val if prev_val is not None else None
         delta_str = ""
@@ -108,40 +152,40 @@ def generate_html(
             sign = "+" if delta > 0 else ""
             delta_cls = "pos" if delta > 0 else "neg" if delta < 0 else ""
             delta_str = f'{sign}{delta:.2f}'
-        lens = spec["lens"][0] if spec.get("lens") else "growth"
+        res = results.get(key, {})
+        score_val = res.get("score")
         rows_html += f"""
             <tr onclick="showChart('{key}')" style="cursor:pointer">
-                <td>{spec['name_bg']}</td>
-                <td><span class="lens-badge lens-{lens}">{lens}</span></td>
+                {name_cell}
+                <td><span class="lens-badge lens-{lens}">{badge}</span></td>
                 <td>{last_date}</td>
                 <td><b>{last_val:.2f}</b></td>
                 <td class="{delta_cls}">{delta_str}</td>
+                <td style="color:{_score_color(score_val)}"><b>{_fmt_score(score_val)}</b></td>
             </tr>"""
 
     # ── Module score bars ────────────────────────────────────────────────────
-    bg_names = {
-        "growth": "Растеж",
-        "inflation": "Инфлация",
-        "labor": "Пазар на труда",
-        "credit": "Кредит & Финанси",
-        "external": "Външен сектор",
-    }
     module_bars = ""
     for mod, score in module_scores.items():
         color = _score_color(score)
-        name = bg_names.get(mod, mod.capitalize())
+        name = LENS_NAMES_BG.get(mod, mod.capitalize())
+        width = score if score is not None else 0.0
         module_bars += f"""
         <div class="mod-row">
             <div class="mod-label">{name}</div>
             <div class="mod-bar-wrap">
-                <div class="mod-bar" style="width:{score:.1f}%; background:{color}"></div>
+                <div class="mod-bar" style="width:{width:.1f}%; background:{color}"></div>
             </div>
-            <div class="mod-score" style="color:{color}">{score:.1f}</div>
+            <div class="mod-score" style="color:{color}">{_fmt_score(score)}</div>
         </div>"""
 
-    # ── Regime history sparkline data (last 5 regime labels) ─────────────────
+    # ── Regime hero ──────────────────────────────────────────────────────────
     regime_color = regime["color"]
     regime_name = regime["name"]
+    composite_str = _fmt_score(composite)
+    weights_str = " · ".join(
+        f"{LENS_NAMES_BG.get(m, m).lower()} {w:.0%}" for m, w in MODULE_WEIGHTS.items()
+    )
 
     html = f"""<!DOCTYPE html>
 <html lang="bg">
@@ -175,7 +219,22 @@ def generate_html(
   .regime-score-big {{ font-size:4em; font-weight:800; color:{regime_color}; line-height:1; }}
   .regime-label {{ font-size:1.5em; font-weight:600; color:{regime_color}; }}
   .regime-desc {{ color:var(--muted); font-size:0.9em; margin-top:6px; max-width:500px; }}
-  
+  .verdict {{ font-size:1.05em; font-weight:600; color:var(--text); margin-top:10px; max-width:560px; line-height:1.45; }}
+
+  /* Методология */
+  .methodology {{ background:var(--card); border:1px solid var(--border); border-radius:12px;
+                  padding:18px 24px; margin-bottom:30px; }}
+  .methodology summary {{ cursor:pointer; font-weight:600; font-size:0.95em; }}
+  .methodology h4 {{ font-size:0.85em; text-transform:uppercase; letter-spacing:0.6px;
+                     color:var(--accent); margin:16px 0 4px; }}
+  .methodology p {{ color:var(--muted); font-size:0.87em; line-height:1.55; }}
+  .methodology code {{ background:#252836; padding:1px 5px; border-radius:4px; font-size:0.92em; }}
+
+  /* Индикаторни имена + застояли наблюдения */
+  .ind-name a {{ border-bottom:1px dotted rgba(124,106,247,0.5); }}
+  .ind-name a:hover {{ border-bottom-color:var(--accent); }}
+  .stale {{ color:#ff9800; cursor:help; }}
+
   /* Module bars */
   .modules-card {{ background:var(--card); border-radius:12px; padding:24px; margin-bottom:30px; border:1px solid var(--border); }}
   .modules-card h2 {{ margin-bottom:20px; font-size:1.1em; color:var(--muted); text-transform:uppercase; letter-spacing:1px; }}
@@ -238,18 +297,63 @@ def generate_html(
   <!-- Regime Hero -->
   <div class="regime-hero">
     <div>
-      <div class="regime-score-big">{composite:.1f}</div>
+      <div class="regime-score-big">{composite_str}</div>
       <div style="color:var(--muted); font-size:0.8em; margin-top:4px;">от 100</div>
     </div>
     <div>
       <div class="regime-label">{regime_name}</div>
+      <div class="verdict">{verdict}</div>
       <div class="regime-desc">
-        Композитен макроикономически резултат за България, изчислен на база
-        {len(SERIES_CATALOG)} ключови индикатора от Eurostat (НСИ и БНБ данни).
-        Скорът отразява текущото положение спрямо историческото разпределение от 2000г.
+        Композитен макроикономически резултат за България по {len(SERIES_CATALOG)} ключови
+        индикатора от Eurostat (НСИ и БНБ данни). 50 = близката 10-годишна норма;
+        по-високо = по-здраво.
       </div>
     </div>
   </div>
+
+  <!-- Методология (ФОРМА-КАНОН: обяснението стои при уреда, не в друг документ) -->
+  <details class="methodology" open>
+    <summary>Как да четеш този дашборд</summary>
+
+    <h4>Скалата 0–100</h4>
+    <p>
+      Всяка серия се сравнява със СОБСТВЕНАТА си близка норма — медианата на
+      последните 10 години, а разсейването се мери робастно
+      (<code>1.4826 · MAD</code>, за да не разтяга скалата един извънреден месец).
+      Полученото отклонение минава през <code>score = 50·(1 + tanh(z/2))</code>:
+      <b>50 = нормалното за България напоследък</b>, ±2σ ≈ 88 / 12. Числото е
+      описателно (къде сме), не прогнозно.
+    </p>
+
+    <h4>Инфлацията се мери като отклонение от 2%</h4>
+    <p>
+      Не „ниско = добре" — иначе дефлацията би излизала отличник. Здравето е
+      максимално при целта на ЕЦБ (2%) и пада симетрично в двете посоки
+      (U-форма). България е в еврозоната от 01.01.2026 → същият център като EA.
+    </p>
+
+    <h4>Текущата сметка е 4-тримесечна плъзгаща</h4>
+    <p>
+      Конвенционалният прочит за съотношения спрямо БВП. Суровото тримесечие е
+      чувствително по-волатилно и остава на графиката като тънка прекъсната
+      линия, но скорът и таблицата четат плъзгащата.
+    </p>
+
+    <h4>Композитът</h4>
+    <p>
+      Претеглена средна на петте лещи ({weights_str}). Леща без данни ИЗПАДА и
+      теглата се преизчисляват — не се брои като „неутрално 50".
+    </p>
+
+    <h4>As-of дисциплина</h4>
+    <p>
+      „Данни към" е най-скорошното НАБЛЮДЕНИЕ, не времето на генериране. Всеки
+      ред показва своя период; <span class="stale">⚠</span> означава наблюдение
+      по-старо от двойния очакван ритъм на публикуване (месечни &gt; 2 месеца,
+      тримесечни &gt; 6 месеца). Имената на индикаторите водят към набора в
+      Eurostat databrowser.
+    </p>
+  </details>
 
   <!-- Module Bars -->
   <div class="modules-card">
@@ -262,7 +366,7 @@ def generate_html(
     <div class="card">
       <h2>Последни стойности</h2>
       <table>
-        <thead><tr><th>Индикатор</th><th>Тип</th><th>Период</th><th>Стойност</th><th>Δ</th></tr></thead>
+        <thead><tr><th>Индикатор</th><th>Леща</th><th>Период</th><th>Стойност</th><th>Δ</th><th>Score</th></tr></thead>
         <tbody>{rows_html}</tbody>
       </table>
     </div>
@@ -308,13 +412,8 @@ const LENS_BG = {{
 }};
 
 const MODULE_SCORES = {json.dumps(module_scores)};
-const BG_NAMES = {{
-  growth: "Растеж",
-  inflation: "Инфлация",
-  labor: "Пазар на труда",
-  credit: "Кредит",
-  external: "Външен сектор"
-}};
+// Един речник — същите имена като модул-баровете и briefing_context (config.py)
+const BG_NAMES = {json.dumps(LENS_NAMES_BG, ensure_ascii=False)};
 
 // Build chart selector buttons
 const selector = document.getElementById("chart-selector");
@@ -399,12 +498,15 @@ function showChart(key) {{
 
 // Radar chart
 (function() {{
-  const categories = Object.keys(MODULE_SCORES).map(k => BG_NAMES[k] || k);
-  const values = Object.values(MODULE_SCORES);
+  // Леща без данни (null) изпада от радара — не се рисува като „неутрално 50"
+  const entries = Object.entries(MODULE_SCORES).filter(([, v]) => v !== null);
+  if (!entries.length) return;
+  const categories = entries.map(([k]) => BG_NAMES[k] || k);
+  const values = entries.map(([, v]) => v);
   // Close the polygon
   const cats = [...categories, categories[0]];
   const vals = [...values, values[0]];
-  
+
   const trace = {{
     type: "scatterpolar",
     r: vals,

@@ -2,10 +2,20 @@
 core/primitives.py
 ==================
 Математически примитиви за макро анализ.
+
+Робастната част (`robust_stats_latest`) е портната от фамилния двигател
+(`dashboards/eu-macro-dashboard/core/primitives.py`) — виж
+`dashboards/macro-satellite/LENS_SCORING_METHODOLOGY.md` §2.
 """
 import numpy as np
 import pandas as pd
 from typing import Optional
+
+# ─── Константи на фамилния примитив (синхронни с core/scorer.py) ─────────────
+WINDOW_YEARS = 10   # близката норма = последните 10 години
+MIN_OBS = 36        # ≥3 г. в прозореца, иначе fallback към пълната история
+MAD_TO_SIGMA = 1.4826
+
 
 def compute_yoy_pct(series: pd.Series) -> pd.Series:
     """Изчислява Year-over-Year процентно изменение."""
@@ -29,15 +39,21 @@ def compute_yoy_pct(series: pd.Series) -> pd.Series:
         elif diffs > 350:  # Annual
             periods = 1
             
-    return series.pct_change(periods=periods) * 100.0
+    # Zero-base guard (порт от EU): база минаваща през 0 → pct_change дава ±inf,
+    # т.е. фалшив вечен екстремум. inf → NaN (легитимно „недефинирано").
+    return _no_inf(series.pct_change(periods=periods) * 100.0)
 
 def compute_mom_pct(series: pd.Series) -> pd.Series:
     """Изчислява Month-over-Month (или период-към-период) процентно изменение."""
-    return series.pct_change(periods=1) * 100.0
+    return _no_inf(series.pct_change(periods=1) * 100.0)
 
 def compute_qoq_pct(series: pd.Series) -> pd.Series:
     """Изчислява Quarter-over-Quarter процентно изменение."""
-    return series.pct_change(periods=1) * 100.0
+    return _no_inf(series.pct_change(periods=1) * 100.0)
+
+def _no_inf(series: pd.Series) -> pd.Series:
+    """±inf → NaN. Пази скоринга от нулева база в знаменателя."""
+    return series.replace([np.inf, -np.inf], np.nan)
 
 def compute_roll4q_mean(series: pd.Series) -> pd.Series:
     """
@@ -79,5 +95,32 @@ def apply_transform(series: pd.Series, transform: str) -> pd.Series:
         return compute_z_score(series)
     elif transform == "first_diff":
         return series.diff()
-        
+
     return series
+
+
+def robust_stats_latest(
+    series: pd.Series,
+    window_years: int = WINDOW_YEARS,
+    min_obs: int = MIN_OBS,
+) -> Optional[tuple[float, float, float]]:
+    """Робастна норма на последната точка спрямо плъзгащ прозорец.
+
+    Връща (latest_value, median, scale), scale = 1.4826 · MAD (σ-еквивалент,
+    устойчив на outlier-и — един COVID месец не разтяга скалата). Прозорецът е
+    последните `window_years` години ДО последното наблюдение. None ако в
+    прозореца има < min_obs точки (недостатъчна норма → викащият решава).
+    """
+    s = series.dropna()
+    if s.empty:
+        return None
+    if isinstance(s.index, pd.DatetimeIndex):
+        cutoff = s.index[-1] - pd.DateOffset(years=window_years)
+        w = s[s.index >= cutoff]
+    else:
+        w = s
+    if len(w) < min_obs:
+        return None
+    med = float(w.median())
+    mad = float((w - med).abs().median())
+    return float(s.iloc[-1]), med, MAD_TO_SIGMA * mad
