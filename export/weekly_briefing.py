@@ -10,7 +10,14 @@ from pathlib import Path
 
 import pandas as pd
 
-from config import LENS_BADGES_BG, LENS_NAMES_BG, MACRO_REGIMES, MODULE_WEIGHTS
+from config import (
+    LENS_BADGE_COLORS,
+    LENS_BADGES_BG,
+    LENS_LINE_COLORS,
+    LENS_NAMES_BG,
+    MACRO_REGIMES,
+    MODULE_WEIGHTS,
+)
 from catalog.series import SERIES_CATALOG
 from core.display import (
     is_stale,
@@ -20,6 +27,26 @@ from core.display import (
     verdict_sentence,
 )
 from core.primitives import apply_transform
+
+
+# ── Броят лещи не е зашит никъде в текста (мандат №43) ───────────────────────
+# Методологията казваше „петте лещи“ буквално. Шестата леща щеше да я направи
+# невярна тихо — затова числителното се извежда от MODULE_WEIGHTS.
+_COUNT_WORD_BG = {
+    2: "двете", 3: "трите", 4: "четирите", 5: "петте",
+    6: "шестте", 7: "седемте", 8: "осемте",
+}
+
+
+def _count_word(n: int) -> str:
+    return _COUNT_WORD_BG.get(n, f"{n}-те")
+
+
+def _hex_to_rgba(hex_color: str, alpha: float) -> str:
+    """`#60a5fa` → `rgba(96,165,250,0.08)` — запълването под линията."""
+    h = hex_color.lstrip("#")
+    r, g, b = (int(h[i:i + 2], 16) for i in (0, 2, 4))
+    return f"rgba({r},{g},{b},{alpha})"
 
 
 def _score_color(score) -> str:
@@ -198,6 +225,17 @@ def generate_html(
     weights_str = " · ".join(
         f"{LENS_NAMES_BG.get(m, m).lower()} {w:.0%}" for m, w in MODULE_WEIGHTS.items()
     )
+    lens_count_word = _count_word(len(MODULE_WEIGHTS))
+
+    # Палитрата се генерира от ЕДИНИЯ речник в config.py — CSS баджовете тук,
+    # линиите и запълването в JS по-долу. Нова леща = един ред в config.
+    lens_badge_css = "\n".join(
+        f"  .lens-{lens} {{ background:{bg}; color:{fg}; }}"
+        for lens, (bg, fg) in LENS_BADGE_COLORS.items()
+    )
+    lens_fill_colors = {
+        lens: _hex_to_rgba(color, 0.08) for lens, color in LENS_LINE_COLORS.items()
+    }
 
     html = f"""<!DOCTYPE html>
 <html lang="bg">
@@ -275,12 +313,8 @@ def generate_html(
   
   /* Lens badges */
   .lens-badge {{ font-size:0.72em; padding:2px 7px; border-radius:20px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; }}
-  .lens-growth {{ background:#1e3a5f; color:#60a5fa; }}
-  .lens-inflation {{ background:#3f1515; color:#f87171; }}
-  .lens-labor {{ background:#3f2a00; color:#fbbf24; }}
-  .lens-credit {{ background:#2d1f4a; color:#c084fc; }}
-  .lens-external {{ background:#0f3030; color:#34d399; }}
-  
+{lens_badge_css}
+
   /* Chart area */
   .chart-area {{ background:var(--card); border-radius:12px; padding:24px; border:1px solid var(--border); margin-bottom:30px; }}
   .chart-area h2 {{ font-size:1.1em; color:var(--muted); text-transform:uppercase; letter-spacing:1px; margin-bottom:6px; }}
@@ -354,8 +388,23 @@ def generate_html(
 
     <h4>Композитът</h4>
     <p>
-      Претеглена средна на петте лещи ({weights_str}). Леща без данни ИЗПАДА и
-      теглата се преизчисляват — не се брои като „неутрално 50".
+      Претеглена средна на {lens_count_word} лещи ({weights_str}). Леща без данни
+      ИЗПАДА и теглата се преизчисляват — не се брои като „неутрално 50".
+      <b>Внимание при сравнение назад:</b> с добавянето на имотната леща се смени
+      и СЪСТАВЪТ, и теглата — числото е на същата 0–100 скала, но не се сравнява
+      механично с четенията отпреди това.
+    </p>
+
+    <h4>Имоти и строителство</h4>
+    <p>
+      Шестата леща стои на <b>три различни въпроса</b>, затова има три отделни
+      групи: колко струва жилището (<code>prices</code> — индексът на цените на
+      жилищата, г/г), колко се строи днес (<code>activity</code> — строителната
+      продукция) и колко влиза в тръбата (<code>pipeline</code> — разрешителните
+      за строеж по разгъната площ, водещият индикатор). Полярността и на трите е
+      <b>+1</b> и е <b>под преглед</b>: бум в цените и разрешителните е здраве
+      днес и риск утре — същата двузначност като при заплатите и заемния ръст,
+      и трите се решават заедно, не поотделно.
     </p>
 
     <h4>As-of дисциплина</h4>
@@ -438,21 +487,11 @@ def generate_html(
 <script>
 const CHART_DATA = {json.dumps(chart_data, ensure_ascii=False)};
 
-const LENS_COLORS = {{
-  growth:    "#60a5fa",
-  inflation: "#f87171",
-  labor:     "#fbbf24",
-  credit:    "#c084fc",
-  external:  "#34d399"
-}};
+// Един речник за палитрата (config.py) — CSS баджовете, линиите и запълването
+// не се разминават, а нова леща не иска пипане на три места.
+const LENS_COLORS = {json.dumps(LENS_LINE_COLORS, ensure_ascii=False)};
 
-const LENS_BG = {{
-  growth:    "rgba(96,165,250,0.08)",
-  inflation: "rgba(248,113,113,0.08)",
-  labor:     "rgba(251,191,36,0.08)",
-  credit:    "rgba(192,132,252,0.08)",
-  external:  "rgba(52,211,153,0.08)"
-}};
+const LENS_BG = {json.dumps(lens_fill_colors, ensure_ascii=False)};
 
 const MODULE_SCORES = {json.dumps(module_scores)};
 // Един речник — същите имена като модул-баровете и briefing_context (config.py)

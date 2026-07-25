@@ -33,18 +33,29 @@ def _mini_catalog():
 
 # ── Тегла ────────────────────────────────────────────────────────────────────
 
-def test_bg_module_weights_are_untouched():
-    """Композитът тежи по БГ теглата, не по EU-те (мандат §А3)."""
+def test_bg_module_weights_are_the_rebalanced_six():
+    """Мандат №43: шестата леща + ребалансът. Инфлацията и растежът остават
+    водещи (0.20), останалите четири са структурни по 0.15."""
     assert MODULE_WEIGHTS == {
-        "inflation": 0.25, "labor": 0.20, "growth": 0.20,
-        "credit": 0.15, "external": 0.20,
+        "inflation": 0.20, "labor": 0.15, "growth": 0.20,
+        "credit": 0.15, "external": 0.15, "property": 0.15,
     }
-    assert sum(MODULE_WEIGHTS.values()) == pytest.approx(1.0)
+
+
+def test_module_weights_sum_to_exactly_one():
+    """Точният тест (мандат №43 §А4): сумата е 1.0, не „приблизително“.
+
+    Ако утре някой добави седма леща, без да отнеме отнякъде, композитът тихо
+    ще се пренормализира и числото ще се смени без обяснение — този тест го
+    хваща на място.
+    """
+    assert sum(MODULE_WEIGHTS.values()) == pytest.approx(1.0, abs=1e-12)
+    assert len(MODULE_WEIGHTS) == 6
 
 
 def test_composite_is_the_weighted_mean_when_every_lens_is_present():
     scores = {"inflation": 40.0, "labor": 60.0, "growth": 50.0,
-              "credit": 30.0, "external": 20.0}
+              "credit": 30.0, "external": 20.0, "property": 70.0}
     expected = sum(scores[m] * w for m, w in MODULE_WEIGHTS.items())
     assert compute_composite_score(scores) == pytest.approx(round(expected, 1))
 
@@ -52,15 +63,40 @@ def test_composite_is_the_weighted_mean_when_every_lens_is_present():
 # ── Ренормализация ───────────────────────────────────────────────────────────
 
 def test_empty_lens_drops_out_and_weights_renormalise():
-    scores = {"inflation": 40.0, "labor": 60.0,
-              "growth": None, "credit": None, "external": None}
-    expected = (40.0 * 0.25 + 60.0 * 0.20) / (0.25 + 0.20)
+    scores = {"inflation": 40.0, "labor": 60.0, "growth": None,
+              "credit": None, "external": None, "property": None}
+    expected = (40.0 * 0.20 + 60.0 * 0.15) / (0.20 + 0.15)
     assert compute_composite_score(scores) == pytest.approx(round(expected, 1))
 
 
+def test_an_empty_property_lens_renormalises_over_the_other_five():
+    """Ако Eurostat замълчи и трите имотни серии → лещата ИЗПАДА и композитът
+    се смята върху 0.85, а не с 50 на мястото ѝ (мандат №43 §А4)."""
+    five = {"inflation": 34.8, "labor": 67.4, "growth": 47.1,
+            "credit": 50.8, "external": 2.3}
+    scores = dict(five, property=None)
+
+    wsum = sum(MODULE_WEIGHTS[l] for l in five)
+    expected = sum(five[l] * MODULE_WEIGHTS[l] for l in five) / wsum
+
+    assert wsum == pytest.approx(0.85)
+    assert compute_composite_score(scores) == pytest.approx(round(expected, 1))
+
+
+def test_property_lens_actually_moves_the_composite():
+    """Шестата леща не е декорация — при 0.15 тегло тя мести числото."""
+    five = {"inflation": 34.8, "labor": 67.4, "growth": 47.1,
+            "credit": 50.8, "external": 2.3}
+    without = compute_composite_score(dict(five, property=None))
+    with_high = compute_composite_score(dict(five, property=70.9))
+    with_low = compute_composite_score(dict(five, property=10.0))
+
+    assert with_high > without > with_low
+
+
 def test_empty_lens_is_not_counted_as_neutral_fifty():
-    scores = {"inflation": 40.0, "labor": 60.0,
-              "growth": None, "credit": None, "external": None}
+    scores = {"inflation": 40.0, "labor": 60.0, "growth": None,
+              "credit": None, "external": None, "property": None}
     as_neutral = sum(
         (scores[m] if scores[m] is not None else 50.0) * w
         for m, w in MODULE_WEIGHTS.items()
@@ -74,8 +110,8 @@ def test_composite_is_none_when_no_lens_has_data():
 
 
 def test_nan_lens_score_is_treated_as_missing():
-    scores = {"inflation": float("nan"), "labor": 60.0,
-              "growth": None, "credit": None, "external": None}
+    scores = {"inflation": float("nan"), "labor": 60.0, "growth": None,
+              "credit": None, "external": None, "property": None}
     assert compute_composite_score(scores) == pytest.approx(60.0)
 
 

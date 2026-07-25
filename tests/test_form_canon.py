@@ -12,7 +12,14 @@ import pandas as pd
 import pytest
 
 from catalog.series import SERIES_CATALOG
-from config import LENS_BADGES_BG, LENS_NAMES_BG, LENS_SUBJECTS_BG, MODULE_WEIGHTS
+from config import (
+    LENS_BADGE_COLORS,
+    LENS_BADGES_BG,
+    LENS_LINE_COLORS,
+    LENS_NAMES_BG,
+    LENS_SUBJECTS_BG,
+    MODULE_WEIGHTS,
+)
 from core.display import (
     databrowser_url,
     ecb_series_url,
@@ -143,8 +150,18 @@ def test_one_vocabulary_covers_every_lens():
 
 def test_lens_badges_are_bulgarian():
     assert set(LENS_BADGES_BG.values()) == {
-        "растеж", "инфлация", "труд", "кредит", "външен"
+        "растеж", "инфлация", "труд", "кредит", "външен", "имоти"
     }
+
+
+def test_every_lens_has_a_colour_in_the_single_palette():
+    """Мандат №43: палитрата беше на ТРИ места (CSS + два JS речника). Сега е
+    една — и всяка леща от теглата има ред в нея."""
+    for lens in MODULE_WEIGHTS:
+        assert lens in LENS_LINE_COLORS, lens
+        assert lens in LENS_BADGE_COLORS, lens
+        bg, fg = LENS_BADGE_COLORS[lens]
+        assert bg.startswith("#") and fg.startswith("#"), lens
 
 
 # ── Застояло наблюдение ──────────────────────────────────────────────────────
@@ -217,6 +234,53 @@ def test_html_uses_the_bulgarian_lens_badges(rendered):
 def test_html_module_bars_use_the_shared_vocabulary(rendered):
     for name in LENS_NAMES_BG.values():
         assert name in rendered
+
+
+# ── Мандат №43: лицето носи ШЕСТТЕ лещи, нищо не е зашито на пет ─────────────
+
+def test_html_draws_one_module_bar_per_lens(rendered):
+    """Модул-баровете се броят по MODULE_WEIGHTS, не по зашит списък."""
+    assert rendered.count('class="mod-label"') == len(MODULE_WEIGHTS)
+    for name in LENS_NAMES_BG.values():
+        assert f'<div class="mod-label">{name}</div>' in rendered
+
+
+def test_html_carries_a_badge_class_and_colour_for_every_lens(rendered):
+    for lens, (bg, fg) in LENS_BADGE_COLORS.items():
+        assert f".lens-{lens} {{ background:{bg}; color:{fg}; }}" in rendered
+    assert '<span class="lens-badge lens-property">имоти</span>' in rendered
+
+
+def test_html_radar_and_chart_palette_know_every_lens(rendered):
+    """Радарът чете BG_NAMES, графиките — LENS_COLORS/LENS_BG. И трите речника
+    се сериализират от config, затова шестата леща влиза навсякъде наведнъж."""
+    for lens, color in LENS_LINE_COLORS.items():
+        assert f'"{lens}": "{color}"' in rendered
+    assert '"property": "Имоти и строителство"' in rendered
+    assert '"property": "rgba(251,146,60,0.08)"' in rendered
+
+
+def test_html_methodology_names_the_lens_count_and_the_rebalance(rendered):
+    """„Претеглена средна на петте лещи“ щеше да стане тиха неистина."""
+    assert "Претеглена средна на шестте лещи" in rendered
+    assert "петте лещи" not in rendered
+    assert "имоти и строителство 15%" in rendered
+    assert "не се сравнява" in rendered
+
+
+def test_html_explains_the_property_lens_and_its_ambiguous_polarity(rendered):
+    """ФОРМА-КАНОН: обяснението стои ПРИ уреда. Бум-полярността е под преглед и
+    лицето го казва, вместо да я представя за уредено решение."""
+    assert "<h4>Имоти и строителство</h4>" in rendered
+    for token in ("prices", "activity", "pipeline", "под преглед",
+                  "разрешителните", "риск утре"):
+        assert token in rendered, token
+
+
+def test_html_property_rows_link_to_the_eurostat_datasets(rendered):
+    for key in ("BG_HPI", "BG_CONSTR", "BG_PERMITS"):
+        spec = SERIES_CATALOG[key]
+        assert source_url(spec["source"], spec["id"]) in rendered, key
 
 
 def test_html_flags_a_short_window_with_a_tooltip(tmp_path):

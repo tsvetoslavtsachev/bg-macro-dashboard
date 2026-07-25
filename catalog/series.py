@@ -10,7 +10,7 @@ from typing import Any
 
 ALLOWED_SOURCES = {"eurostat", "ecb", "nsi", "bnb", "derived"}
 ALLOWED_REGIONS = {"BG", "EU"}
-ALLOWED_LENSES = {"labor", "inflation", "growth", "credit", "external"}
+ALLOWED_LENSES = {"labor", "inflation", "growth", "credit", "external", "property"}
 ALLOWED_TRANSFORMS = {"level", "yoy_pct", "mom_pct", "qoq_pct", "z_score", "first_diff", "roll4q_mean"}
 ALLOWED_SCORING_MODES = {"level", "momentum"}
 ALLOWED_SCHEDULES = {"daily", "weekly", "monthly", "quarterly", "annually"}
@@ -303,6 +303,75 @@ SERIES_CATALOG: dict[str, dict[str, Any]] = {
         "revision_prone": False,
         "narrative_hint": "Кредитът за домакинствата храни потреблението и жилищния "
                           "пазар — бърз ръст е едновременно сила и риск.",
+    },
+
+    # ════════════════════════════════════════════════════════
+    # PROPERTY — имоти и строителство (мандат №43)
+    # ════════════════════════════════════════════════════════
+    # Шестата леща. Трите крака са ТРИ РАЗЛИЧНИ въпроса, затова са три отделни
+    # peer-групи, не един „имотен“ сигнал:
+    #   `prices`   — колко струва активът (цената на жилището)
+    #   `activity` — колко се строи ДНЕС (реалната продукция)
+    #   `pipeline` — колко влиза в тръбата (разрешителните, водещият индикатор)
+    # Живо проверени Eurostat заявки (26.07.2026 — не се преоткриват):
+    # `prc_hpi_q` носи готов г/г темп (unit `RCH_A`) → transform `level`;
+    # другите две са ИНДЕКСИ (2021=100) → `yoy_pct`. Внимание при разрешителните:
+    # dimension кодът `PSQM` НЕ съществува — верният е `BPRM_SQM`.
+    "BG_HPI": {
+        "source": "eurostat",
+        "id": "prc_hpi_q?geo=BG&purchase=TOTAL&unit=RCH_A",
+        "region": "BG",
+        "name_bg": "Цени на жилищата (HPI, г/г)",
+        "name_en": "House Price Index (YoY)",
+        "lens": ["property"],
+        "peer_group": "prices",
+        "tags": ["headline"],
+        "transform": "level",
+        "is_rate": True,
+        "historical_start": "2006-01-01",
+        "release_schedule": "quarterly",
+        "typical_release": "mid_quarter",
+        "revision_prone": True,
+        "narrative_hint": "Жилищният пазар — цената на актива, който държи "
+                          "по-голямата част от богатството на домакинствата и "
+                          "обезпечава ипотечния кредит.",
+    },
+    "BG_CONSTR": {
+        "source": "eurostat",
+        "id": "sts_copr_m?geo=BG&nace_r2=F&s_adj=CA&indic_bt=PRD&unit=I21",
+        "region": "BG",
+        "name_bg": "Строителна продукция (г/г)",
+        "name_en": "Construction Production Index (YoY)",
+        "lens": ["property"],
+        "peer_group": "activity",
+        "tags": [],
+        "transform": "yoy_pct",
+        "is_rate": False,
+        "historical_start": "2000-01-01",
+        "release_schedule": "monthly",
+        "typical_release": "mid_month",
+        "revision_prone": False,
+        "narrative_hint": "Реалната строителна активност — какво се строи в "
+                          "момента, а не какво се планира.",
+    },
+    "BG_PERMITS": {
+        "source": "eurostat",
+        "id": "sts_cobp_q?geo=BG&indic_bt=BPRM_SQM&cpa2_1=CPA_F41001&s_adj=SCA&unit=I21",
+        "region": "BG",
+        "name_bg": "Разрешителни за строеж — жилищни, м² (г/г)",
+        "name_en": "Building Permits, Residential Floor Area (YoY)",
+        "lens": ["property"],
+        "peer_group": "pipeline",
+        "tags": ["leading"],
+        "transform": "yoy_pct",
+        "is_rate": False,
+        "historical_start": "2000-01-01",
+        "release_schedule": "quarterly",
+        "typical_release": "mid_quarter",
+        "revision_prone": True,
+        "narrative_hint": "Водещият индикатор на строителния цикъл — какво влиза "
+                          "в тръбата днес, за да излезе като предлагане след "
+                          "година-две.",
     },
 }
 

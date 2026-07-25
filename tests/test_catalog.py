@@ -38,8 +38,9 @@ def test_current_account_is_four_quarter_rolling():
 
 # ── Фаза 3.1: БНБ сериите (мандат №39 §А2) ───────────────────────────────────
 
-def test_catalog_carries_fourteen_series():
-    assert len(SERIES_CATALOG) == 14
+def test_catalog_carries_seventeen_series():
+    """14 след М42 + трите имотни серии на М43."""
+    assert len(SERIES_CATALOG) == 17
 
 
 def test_loan_series_come_from_the_ecb_bsi_dataset():
@@ -143,6 +144,68 @@ def test_lending_rate_is_not_spliced_with_any_manual_seed():
     from sources.manual_seed import SEED_TO_CATALOG
 
     assert "BG_LENDING_RATE" not in SEED_TO_CATALOG.values()
+
+
+# ── Мандат №43: имотната леща ────────────────────────────────────────────────
+
+def test_property_lens_is_three_series_in_three_peer_groups():
+    """Трите крака са ТРИ въпроса — цена · активност · тръба. В една peer-група
+    щяха да се усреднят в един „имотен“ сигнал и водещият индикатор щеше да се
+    удави в текущата продукция."""
+    prop = {k: v for k, v in SERIES_CATALOG.items() if "property" in v["lens"]}
+    assert set(prop) == {"BG_HPI", "BG_CONSTR", "BG_PERMITS"}
+    assert {v["peer_group"] for v in prop.values()} == {
+        "prices", "activity", "pipeline"
+    }
+
+
+def test_property_lens_is_allowed_in_the_catalog_vocabulary():
+    from catalog.series import ALLOWED_LENSES
+
+    assert "property" in ALLOWED_LENSES
+
+
+def test_hpi_is_already_a_year_on_year_rate_so_it_stays_a_level():
+    """`prc_hpi_q` unit `RCH_A` = ВЕЧЕ г/г процент. `yoy_pct` върху него би дало
+    „темп на темпа“ — безсмислица. Затова transform=level, is_rate=True."""
+    spec = SERIES_CATALOG["BG_HPI"]
+    assert spec["source"] == "eurostat"
+    assert "prc_hpi_q" in spec["id"]
+    assert "unit=RCH_A" in spec["id"]
+    assert "purchase=TOTAL" in spec["id"]
+    assert spec["transform"] == "level"
+    assert spec["is_rate"] is True
+    assert spec["historical_start"] == "2006-01-01"
+    assert spec["release_schedule"] == "quarterly"
+
+
+def test_construction_and_permits_are_indices_read_as_growth_rates():
+    """И двете са индекси 2021=100 → нивото не е сравнимо във времето; четат се
+    като г/г, точно като промишленото производство."""
+    for key in ("BG_CONSTR", "BG_PERMITS"):
+        spec = SERIES_CATALOG[key]
+        assert spec["transform"] == "yoy_pct", key
+        assert spec["is_rate"] is False, key
+        assert "unit=I21" in spec["id"], key
+
+
+def test_permits_use_the_square_metre_indicator_that_actually_exists():
+    """Живо проверено 26.07.2026: `indic_bt=PSQM` НЕ съществува в `sts_cobp_q`;
+    верният код за разгъната площ е `BPRM_SQM`. Ако някой върне PSQM, заявката
+    се връща празна и лещата тихо губи един крак — затова се пинва тук."""
+    spec = SERIES_CATALOG["BG_PERMITS"]
+    assert "sts_cobp_q" in spec["id"]
+    assert "indic_bt=BPRM_SQM" in spec["id"]
+    assert "indic_bt=PSQM" not in spec["id"]
+    assert "cpa2_1=CPA_F41001" in spec["id"], "жилищни сгради, не всички"
+
+
+def test_construction_reads_the_calendar_adjusted_nace_f_production():
+    spec = SERIES_CATALOG["BG_CONSTR"]
+    assert "sts_copr_m" in spec["id"]
+    assert "nace_r2=F" in spec["id"]
+    assert "s_adj=CA" in spec["id"]
+    assert spec["release_schedule"] == "monthly"
 
 
 def test_trade_balance_is_the_goods_and_services_balance():

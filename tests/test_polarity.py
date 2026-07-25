@@ -40,6 +40,16 @@ def test_lending_rate_is_inverted():
     assert polarity_for("BG_LENDING_RATE") == -1
 
 
+def test_property_series_are_positive_pending_the_boom_polarity_review():
+    """Мандат №43: и трите имотни серии са +1 — бум = „здраве“ в лещовия смисъл.
+
+    Двузначността (здраве днес, риск утре) е СЪЩИЯТ въпрос като при WAGES и
+    заемния ръст и се решава за трите заедно във Фаза 3.x, не тук.
+    """
+    for key in ("BG_HPI", "BG_CONSTR", "BG_PERMITS"):
+        assert polarity_for(key) == +1, key
+
+
 def test_wages_stay_positive_pending_phase_three():
     """Двузначността на заплатите е Фаза 3 обсъждане — тук остават +1."""
     assert polarity_for("BG_WAGES") == +1

@@ -43,12 +43,25 @@ def test_context_file_is_written(context):
 
 
 def test_context_stays_compact_like_the_china_model(context):
-    """~6-8 KB за 10 серии — не 44-килобайтовият EU експорт."""
+    """Компактният фамилен модел — не 44-килобайтовият EU експорт.
+
+    Таванът СЛЕДВА броя лещи, компактността остава принципът. При 5 лещи беше
+    12 000 (живият файл ~11 100). Мандат №43 добавя шеста лещова секция + двете
+    ѝ бележки за качеството → живият файл е ~14 300, фикстурата ~14 200.
+    15 000 оставя ~5% запас: достатъчно да не пада от закръгление, достатъчно
+    тясно, за да ГРЪМНЕ при следващото сериозно раздуване — което е смисълът
+    на този тест (тревога, не бюджет).
+    """
     text, _, _ = context
-    assert len(text.encode("utf-8")) < 12_000
+    assert len(text.encode("utf-8")) < 15_000
 
 
-def test_context_carries_all_five_lenses(context):
+def test_context_carries_every_lens(context):
+    """Речникът е един — колкото лещи има в него, толкова секции има в експорта.
+
+    Тестът е по РЕЧНИКА, не по числото 5 или 6: шестата леща влезе, без да се
+    пипа тук, а седмата ще влезе по същия начин.
+    """
     text, _, _ = context
     for name in LENS_NAMES_BG.values():
         assert f"## {name}" in text
@@ -147,6 +160,40 @@ def test_credit_lens_section_lists_all_four_series(context):
     credit_section = text.split(f"## {LENS_NAMES_BG['credit']}")[1].split("\n---\n")[0]
     for key in ("BG_LT_RATE", "BG_LENDING_RATE", "BG_LOANS_NFC", "BG_LOANS_HH"):
         assert SERIES_CATALOG[key]["name_bg"] in credit_section, key
+
+
+# ── Мандат №43: имотната леща ────────────────────────────────────────────────
+
+def test_property_lens_section_lists_all_three_series(context):
+    """Шестата леща стига до експорта с трите си крака, не като едно име."""
+    text, _, _ = context
+    section = text.split(f"## {LENS_NAMES_BG['property']}")[1].split("\n---\n")[0]
+    for key in ("BG_HPI", "BG_CONSTR", "BG_PERMITS"):
+        assert SERIES_CATALOG[key]["name_bg"] in section, key
+
+
+def test_notes_explain_the_property_lens_and_its_three_peer_groups():
+    """Анализаторът трябва да знае, че `имоти` е ТРИ различни въпроса."""
+    joined = " ".join(DATA_QUALITY_NOTES)
+    for token in ("prc_hpi_q", "sts_copr_m", "sts_cobp_q",
+                  "prices", "activity", "pipeline"):
+        assert token in joined, token
+
+
+def test_notes_warn_that_the_composite_was_rebalanced():
+    """Смяна на СЪСТАВА, не само на теглата — иначе някой ще сравни 45.1 с 39.7
+    като че ли е същият уред."""
+    joined = " ".join(DATA_QUALITY_NOTES)
+    assert "РЕБАЛАНСИРАН" in joined
+    assert "не го сравнявай механично" in joined
+
+
+def test_notes_flag_the_boom_polarity_as_under_review():
+    """Бум в цените и разрешителните е здраве днес и риск утре — уредът го брои
+    като сила, затова уговорката пътува с числото."""
+    joined = " ".join(DATA_QUALITY_NOTES)
+    assert "ПОД ПРЕГЛЕД" in joined
+    assert "Фаза 3" in joined
 
 
 def test_short_window_series_get_a_note_in_the_export(tmp_path):
