@@ -5,7 +5,7 @@
 ## Архитектура
 
 ```
-catalog/series.py       → Каталог от 13 серии с metadata
+catalog/series.py       → Каталог от 14 серии с metadata
 catalog/polarity.py     → Полярност: +1 / −1 / ("U","target",X)
 sources/eurostat_adapter.py → Eurostat JSON-stat 2.0 клиент с кеш
 sources/ecb_adapter.py  → ECB Data Portal SDMX-JSON клиент с кеш + ретраи
@@ -28,8 +28,9 @@ run.py                  → CLI entry point
 
 1. Намери id-то на серията:
    - Eurostat → `sts_inpr_m?geo=BG&...`, `source: "eurostat"`
-   - ЕЦБ → `<набор>/<ключ>`, напр. `BSI/M.BG.N.A.A20.A.1.U6.2240.Z01.E`,
-     `source: "ecb"`
+   - ЕЦБ → `<набор>/<ключ>`, напр. `BSI/M.BG.N.A.A20.A.1.U6.2240.Z01.E` или
+     `MIR/M.BG.B.A2A.A.R.A.2240.EUR.N`, `source: "ecb"`. Наборът е свободен —
+     адаптерът и линк-функцията са generic по flow, не зашити за BSI.
 2. Добави в `catalog/series.py` → `SERIES_CATALOG` (задължително `lens`,
    `peer_group`, `transform`, `narrative_hint`)
 3. Реши `peer_group` **съзнателно**: серии в една група дават ЕДИН сигнал
@@ -45,7 +46,7 @@ run.py                  → CLI entry point
 
 Формат: JSON-stat 2.0. Периодите са в `dimension.time.category.index`.
 
-## ECB Data Portal API (набор BSI — БНБ кредитната статистика)
+## ECB Data Portal API (набори BSI и MIR — БНБ кредитната статистика)
 
 Базов URL: `https://data-api.ecb.europa.eu/service/data/{flowref}/{key}?format=jsondata`
 
@@ -62,7 +63,25 @@ run.py                  → CLI entry point
 - Няма редономинационен скок около 01.2026 — сериите са в евро през целия период.
 - Линкът към серията иска ключа **с префикса на набора**:
   `/data/datasets/BSI/BSI.M.BG.…`. Без префикса адресът е 404
-  (`core/display.py::ecb_series_url`).
+  (`core/display.py::ecb_series_url`). Функцията е **generic по набор** — живо
+  проверена и за MIR (`/data/datasets/MIR/MIR.M.BG.B.A2A.A.R.A.2240.EUR.N` → 200,
+  26.07.2026).
+
+### Набор MIR — лихвената статистика (мандат №42)
+
+`MIR/M.BG.B.A2A.A.R.A.2240.EUR.N` = годишно приведена ставка (AAR/NDER) по
+**нов бизнес**, кредити различни от револвиращи и овърдрафт, към нефинансови
+предприятия (counterpart 2240), в EUR, месечна.
+
+- За разлика от BSI, MIR носи **цялата история** в API-то: 2007-01 → 2026-05
+  (n=233 на 26.07.2026). Никакъв seed, никакъв сплайс — серията се чете директно.
+- Салда вариантът (`…A2A…O`) НЕ се ползва: ЕЦБ го държи чак от **2019-12**
+  (n=78) и включва овърдрафтите. Публикуваният файл на БНБ
+  `s_ir_loan_oa_nfc_bg.xlsx` е салда само по евро-деноминираните кредити —
+  разминава се **дефиниционно** (0.3–2.2 пп) с всички API варианти и остава
+  референция за ръчна сверка, не източник.
+- `transform: "level"`, `is_rate: True`, полярност **−1**, peer-група
+  `lending_cost` (отделна от `yields` — различен канал).
 
 ## `data/manual/` — БНБ seed-ът и сплайсът (мандат №41)
 
@@ -121,8 +140,9 @@ counterpart 2240) и `Домакинства и НТООД` (2250); `Финан�
    (`U_BAND = 1.0`, `z_h = U_BAND − |z_dev|`)
 4. `score = 50 · (1 + tanh(z_h / 2))` — **50 = близката норма**
 5. Серия → peer-група (средно) → леща (претеглено; всички тегла 1.0).
-   Кредит = 3 серии в 2 групи (`yields` · `lending` = двата заема заедно);
-   външен = 2 серии в 2 групи (`current_account` · `trade`).
+   Кредит = 4 серии в 3 групи (`yields` · `lending` = двата заема заедно ·
+   `lending_cost` = лихвата по нов бизнес); външен = 2 серии в 2 групи
+   (`current_account` · `trade`).
 6. Composite = weighted average по `MODULE_WEIGHTS`, **ренормализиран** —
    леща без данни изпада, не се брои като 50
 
@@ -147,3 +167,8 @@ MODULE_WEIGHTS = {
 Данните се кешират в `data/eurostat_cache.json` и `data/ecb_cache.json` —
 отделни файлове на източник, и двата се комитват.
 TTL: monthly=10 дни, quarterly=30 дни, weekly=3 дни.
+
+**Планираният GitHub Actions пуск ВИНАГИ форсира** (`--refresh`, мандат №42):
+тримесечен TTL 30 дни + седмичен cron без force = ново тримесечие може да чака
+до ~30 дни на дашборда. Fetch-ът на всички серии е секунди, така че цената на
+force-а е нула. Ръчният пуск пази input-а `force_refresh`.

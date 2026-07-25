@@ -116,7 +116,8 @@ EUROSTAT_DATABROWSER = (
 
 # ECB Data Portal — страницата на КОНКРЕТНАТА серия. Живо проверено 25.07.2026:
 # ключът се повтаря с префикса на набора (`BSI/BSI.M.BG.…`); адресът без
-# префикса (`/datasets/BSI/M.BG.…`) връща 404.
+# префикса (`/datasets/BSI/M.BG.…`) връща 404. Шаблонът е GENERIC по набор —
+# наборът идва от каталожното id. Живо проверено 26.07.2026 и за MIR (200).
 ECB_DATA_PORTAL = "https://data.ecb.europa.eu/data/datasets/{flow}/{flow}.{key}"
 # Резервният адрес, ако каталожното id не се разложи на набор + ключ.
 ECB_SEARCH = "https://data.ecb.europa.eu/search-results?searchTerm={term}"

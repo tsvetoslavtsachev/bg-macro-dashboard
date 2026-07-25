@@ -35,13 +35,19 @@ def test_unemployment_and_yield_are_inverted():
     assert polarity_for("BG_LT_RATE") == -1
 
 
+def test_lending_rate_is_inverted():
+    """Мандат №42: по-скъп нов кредит = по-стегнати условия, не по-здраво."""
+    assert polarity_for("BG_LENDING_RATE") == -1
+
+
 def test_wages_stay_positive_pending_phase_three():
     """Двузначността на заплатите е Фаза 3 обсъждане — тук остават +1."""
     assert polarity_for("BG_WAGES") == +1
 
 
 def test_everything_else_is_plus_one():
-    inverted_or_u = {"BG_UNRATE", "BG_LT_RATE", "BG_HICP", "BG_HICP_CORE"}
+    inverted_or_u = {"BG_UNRATE", "BG_LT_RATE", "BG_LENDING_RATE",
+                     "BG_HICP", "BG_HICP_CORE"}
     for key in SERIES_CATALOG:
         if key in inverted_or_u:
             continue

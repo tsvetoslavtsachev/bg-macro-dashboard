@@ -121,8 +121,32 @@ def test_notes_describe_the_new_lens_composition_not_single_series():
     """Едносерийната уговорка вече НЕ е вярна за кредит/външен."""
     joined = " ".join(DATA_QUALITY_NOTES)
     assert "не е едносериен" in joined
-    for token in ("lending", "yields", "current_account", "trade"):
+    for token in ("lending", "yields", "current_account", "trade", "lending_cost"):
         assert token in joined, token
+
+
+# ── Мандат №42: цената на кредита ────────────────────────────────────────────
+
+def test_notes_explain_that_the_lending_rate_is_new_business_not_stocks():
+    """Анализаторът трябва да знае КОЯ лихва чете, преди да я ползва."""
+    joined = " ".join(DATA_QUALITY_NOTES)
+    for token in ("MIR", "НОВ БИЗНЕС", "2007-01"):
+        assert token in joined, token
+
+
+def test_notes_name_the_rejected_alternatives_and_the_bnb_reference():
+    """Отхвърлените варианти се документират — иначе следващият ги „открива“
+    пак и ги слага мълчаливо."""
+    joined = " ".join(DATA_QUALITY_NOTES)
+    for token in ("2019-12", "s_ir_loan_oa_nfc_bg", "РЕФЕРЕНЦИЯ"):
+        assert token in joined, token
+
+
+def test_credit_lens_section_lists_all_four_series(context):
+    text, _, _ = context
+    credit_section = text.split(f"## {LENS_NAMES_BG['credit']}")[1].split("\n---\n")[0]
+    for key in ("BG_LT_RATE", "BG_LENDING_RATE", "BG_LOANS_NFC", "BG_LOANS_HH"):
+        assert SERIES_CATALOG[key]["name_bg"] in credit_section, key
 
 
 def test_short_window_series_get_a_note_in_the_export(tmp_path):

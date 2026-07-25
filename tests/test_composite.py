@@ -195,6 +195,50 @@ def test_adding_a_second_loan_does_not_double_the_lending_weight():
     assert z_one == pytest.approx(z_two)
 
 
+# ── Мандат №42: цената на кредита в лещата ───────────────────────────────────
+
+def test_a_full_history_rate_carries_no_thin_window_flag():
+    """MIR носи месечна история от 2007-01 → нормата е ПЪЛНА 10-годишна.
+
+    Ако някой ден серията се смени с къс вариант (напр. салдата от 2019-12),
+    етикетът трябва да спре да казва „10г" — точно това пази тестът.
+    """
+    from core.scorer import score_series
+
+    idx = pd.date_range(start="2007-01-01", end="2026-05-01", freq="MS")
+    s = pd.Series([4.0, 6.0] * (len(idx) // 2) + [4.15] * (len(idx) % 2), index=idx)
+
+    res = score_series(s, transform="level", polarity=-1, name="BG_LENDING_RATE")
+
+    assert res["thin_window"] is False
+    assert res["percentile_window"] == "10г"
+
+
+def test_lending_cost_is_a_third_leg_not_folded_into_yields():
+    """Трите крака на кредита тежат по 1/3 — не 50/50 с цената на дълга."""
+    catalog = {
+        "Y": {"lens": ["credit"], "peer_group": "yields", "transform": "level",
+              "name_bg": "Доходност", "id": "irt?geo=BG"},
+        "C": {"lens": ["credit"], "peer_group": "lending_cost", "transform": "level",
+              "name_bg": "Цена на новия кредит", "id": "MIR/K"},
+        "L": {"lens": ["credit"], "peer_group": "lending", "transform": "level",
+              "name_bg": "Заеми", "id": "BSI/K"},
+    }
+    snapshot = {
+        "Y": _monthly([1.0, 3.0] * 60 + [2.0]),
+        "C": _monthly([1.0, 3.0] * 60 + [7.0]),
+        "L": _monthly([1.0, 3.0] * 60 + [6.0]),
+    }
+    rep = compute_lens_reports(catalog, snapshot)["credit"]
+
+    groups = {pg["name"] for pg in rep["peer_groups"]}
+    assert groups == {"yields", "lending", "lending_cost"}
+
+    zs = {s["key"]: s["health_z"] for s in rep["series"]}
+    expected = (zs["Y"] + zs["C"] + zs["L"]) / 3
+    assert rep["health_z"] == pytest.approx(round(expected, 3), abs=0.001)
+
+
 def test_series_entries_carry_the_catalog_metadata():
     snapshot = {"A": _monthly([1.0, 3.0] * 60 + [2.0])}
     entry = compute_lens_reports(_mini_catalog(), snapshot)["growth"]["series"][0]

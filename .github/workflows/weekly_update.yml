@@ -43,9 +43,13 @@ jobs:
       - name: Тестове (гейт преди генерирането)
         run: pytest -q
 
+      # Планираният пуск ВИНАГИ форсира обновяване. Мотив (корен-фикс, №42):
+      # тримесечните серии имат TTL 30 дни, а cron-ът е седмичен — без force
+      # ново тримесечие може да чака на дашборда до ~30 дни, при положение че
+      # fetch-ът на ~17 серии е секунди. Ръчният пуск пази избора си (input-а).
       - name: Обновяване на данните и генериране на дашборд
         run: |
-          if [ "${{ github.event.inputs.force_refresh }}" = "true" ]; then
+          if [ "${{ github.event_name }}" = "schedule" ] || [ "${{ github.event.inputs.force_refresh }}" = "true" ]; then
             python run.py --briefing --refresh
           else
             python run.py --briefing

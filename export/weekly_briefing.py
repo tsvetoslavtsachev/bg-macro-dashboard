@@ -378,6 +378,17 @@ def generate_html(
       тримесечна и частичното текущо тримесечие не влиза.
     </p>
 
+    <h4>Цената на кредита</h4>
+    <p>
+      „Лихва по нови фирмени кредити" е ставката по <b>нов бизнес</b> (ЕЦБ, набор
+      MIR) — какво плаща фирмата, която тегли <b>днес</b>, а не средното по
+      всички стари договори. Затова реагира бързо на трансмисията, докато
+      салдата изостават. Историята е пълна от <b>01.2007</b>. В лещата тя е
+      трета отделна peer-група (<code>lending_cost</code>) до цената на държавния
+      дълг (<code>yields</code>) и обема на кредита (<code>lending</code>) —
+      трите крака често сочат в различни посоки.
+    </p>
+
     <h4>Къс прозорец</h4>
     <p>
       <span class="thin">⚠</span> до скора значи, че нормата НЕ е върху 10 години
@@ -419,7 +430,7 @@ def generate_html(
 
 <footer>
   Данните са от <a href="https://ec.europa.eu/eurostat" target="_blank">Eurostat</a> (НСИ и БНБ репортинг)
-  и <a href="https://data.ecb.europa.eu/data/datasets/BSI" target="_blank">ЕЦБ Data Portal</a> (набор BSI) ·
+  и <a href="https://data.ecb.europa.eu/data/datasets/BSI" target="_blank">ЕЦБ Data Portal</a> (набори BSI и MIR) ·
   Генериран {generated_str} · Данни към {as_of_str} ·
   <a href="https://github.com/tsvetoslavtsachev/bg-macro-dashboard" target="_blank">GitHub</a>
 </footer>

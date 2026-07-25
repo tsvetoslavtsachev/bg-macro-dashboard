@@ -38,8 +38,8 @@ def test_current_account_is_four_quarter_rolling():
 
 # ── Фаза 3.1: БНБ сериите (мандат №39 §А2) ───────────────────────────────────
 
-def test_catalog_carries_thirteen_series():
-    assert len(SERIES_CATALOG) == 13
+def test_catalog_carries_fourteen_series():
+    assert len(SERIES_CATALOG) == 14
 
 
 def test_loan_series_come_from_the_ecb_bsi_dataset():
@@ -77,16 +77,72 @@ def test_both_loans_share_one_peer_group():
     assert SERIES_CATALOG["BG_LOANS_HH"]["peer_group"] == "lending"
 
 
-def test_credit_lens_is_three_series_in_two_peer_groups():
+def test_credit_lens_is_four_series_in_three_peer_groups():
+    """Мандат №42: цената на новия кредит е ТРЕТИ крак в лещата."""
     credit = {k: v for k, v in SERIES_CATALOG.items() if "credit" in v["lens"]}
-    assert set(credit) == {"BG_LT_RATE", "BG_LOANS_NFC", "BG_LOANS_HH"}
-    assert {v["peer_group"] for v in credit.values()} == {"yields", "lending"}
+    assert set(credit) == {
+        "BG_LT_RATE", "BG_LENDING_RATE", "BG_LOANS_NFC", "BG_LOANS_HH"
+    }
+    assert {v["peer_group"] for v in credit.values()} == {
+        "yields", "lending", "lending_cost"
+    }
 
 
 def test_external_lens_is_two_series_in_two_peer_groups():
     external = {k: v for k, v in SERIES_CATALOG.items() if "external" in v["lens"]}
     assert set(external) == {"BG_CA_GDP", "BG_TRADE_GS"}
     assert {v["peer_group"] for v in external.values()} == {"current_account", "trade"}
+
+
+# ── Мандат №42: цената на кредита ────────────────────────────────────────────
+
+def test_lending_rate_reads_the_ecb_mir_new_business_key():
+    """Точният ключ е решение на мандата, не подробност — пинва се.
+
+    `MIR` (лихвената статистика) · `A2A` (кредити различни от револвиращи и
+    овърдрафт) · `2240` (нефинансови предприятия) · `EUR` · `N` (нов бизнес).
+    """
+    spec = SERIES_CATALOG["BG_LENDING_RATE"]
+    assert spec["source"] == "ecb"
+    assert spec["id"] == "MIR/M.BG.B.A2A.A.R.A.2240.EUR.N"
+
+
+def test_lending_rate_is_new_business_not_outstanding_amounts():
+    """Салда вариантът (`…O`) беше отхвърлен: ЕЦБ го държи чак от 2019-12 и
+    смесва овърдрафтите. Ако някой го върне, тестът пада."""
+    spec = SERIES_CATALOG["BG_LENDING_RATE"]
+    assert spec["id"].endswith(".N"), "нов бизнес завършва на N, салдата на O"
+    assert not spec["id"].endswith(".O")
+
+
+def test_lending_rate_is_read_as_a_level_rate():
+    """Ставка се чете като НИВО — г/г върху лихва би било безсмислица."""
+    spec = SERIES_CATALOG["BG_LENDING_RATE"]
+    assert spec["transform"] == "level"
+    assert spec["is_rate"] is True
+
+
+def test_lending_rate_carries_the_full_history_from_2007():
+    """За разлика от BSI обемите, MIR носи цялата история → пълна 10-г. норма
+    без seed и без сплайс."""
+    spec = SERIES_CATALOG["BG_LENDING_RATE"]
+    assert spec["historical_start"] == "2007-01-01"
+    assert spec["release_schedule"] == "monthly"
+
+
+def test_lending_rate_has_its_own_peer_group_apart_from_yields():
+    """Цената на новия кредит и цената на държавния дълг са РАЗЛИЧНИ канали —
+    в една група щяха да се усреднят в един сигнал."""
+    assert SERIES_CATALOG["BG_LENDING_RATE"]["peer_group"] == "lending_cost"
+    assert SERIES_CATALOG["BG_LT_RATE"]["peer_group"] == "yields"
+
+
+def test_lending_rate_is_not_spliced_with_any_manual_seed():
+    """Мандатната забрана: никакъв seed/сплайс върху дефиниционно разминаване
+    (БНБ файлът е салда само по евро-деноминираните — остава референция)."""
+    from sources.manual_seed import SEED_TO_CATALOG
+
+    assert "BG_LENDING_RATE" not in SEED_TO_CATALOG.values()
 
 
 def test_trade_balance_is_the_goods_and_services_balance():

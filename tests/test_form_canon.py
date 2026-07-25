@@ -61,6 +61,28 @@ def test_ecb_url_repeats_the_dataset_prefix_in_the_key():
     )
 
 
+def test_mir_series_url_carries_the_mir_prefix_not_bsi():
+    """Мандат №42: линк-функцията е GENERIC по набор, не зашита за BSI.
+
+    Живо проверено 26.07.2026 — този адрес връща 200.
+    """
+    spec = SERIES_CATALOG["BG_LENDING_RATE"]
+    url = source_url(spec["source"], spec["id"])
+    assert url == (
+        "https://data.ecb.europa.eu/data/datasets/MIR/"
+        "MIR.M.BG.B.A2A.A.R.A.2240.EUR.N"
+    )
+    assert "/BSI/" not in url
+
+
+def test_ecb_url_is_generic_across_datasets():
+    """Всеки набор минава по същия шаблон — нищо не е hardcoded."""
+    for flow, key in (("BSI", "M.BG.X"), ("MIR", "M.BG.Y"), ("FM", "D.BG.Z")):
+        assert ecb_series_url(f"{flow}/{key}") == (
+            f"https://data.ecb.europa.eu/data/datasets/{flow}/{flow}.{key}"
+        )
+
+
 def test_source_url_sends_eurostat_series_to_the_databrowser():
     spec = SERIES_CATALOG["BG_GDP_YOY"]
     assert source_url(spec["source"], spec["id"]) == databrowser_url(spec["id"])
