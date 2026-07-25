@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Optional
 
 from config import LENS_BANDS, LENS_NAMES_BG
-from core.display import fmt_value, is_stale
+from core.display import fmt_value, is_stale, thin_window_note
 
 # ── ФИКСИРАНИ бележки за качеството на данните (мандат №38 §А4.4) ────────────
 # Уговорките зад числата, които анализаторът трябва да знае ПРЕДИ да ги ползва.
@@ -40,7 +40,41 @@ DATA_QUALITY_NOTES = [
     "**Полярността на заплатите е +1** (по-високи = по-силен пазар на труда) и е "
     "ПОД ПРЕГЛЕД: в прегряваща икономика бърз ръст на компенсациите е двузначен "
     "сигнал (заплатно-ценова спирала). Решението е отложено за Фаза 3.",
+    "**Кредитните серии идват от ЕЦБ (набор BSI), не от Eurostat.** БНБ репортва "
+    "кредитната статистика в BSI; историята за България там започва **01.2022** "
+    "(n≈53 месеца) — преди това порталът е празен. Нормата е върху къс, изцяло бум "
+    "прозорец, затова серията носи етикет „къс прозорец (от YYYY-MM)“ вместо „10г“ "
+    "и z-ът ПОДЦЕНЯВА екстремността. Няма редономинационен скок около 01.2026 — "
+    "сериите са в евро през целия период.",
+    "**Лещовият състав вече не е едносериен.** Кредит = 3 серии в 2 peer-групи "
+    "(`yields`: BG_LT_RATE · `lending`: BG_LOANS_NFC + BG_LOANS_HH — двата заема "
+    "дават ЕДИН сигнал, не два). Външен сектор = 2 серии в 2 peer-групи "
+    "(`current_account`: BG_CA_GDP · `trade`: BG_TRADE_GS). Лещата е средно на "
+    "peer-групите, не на сериите — затова добавянето на втори заем не удвоява "
+    "тежестта на кредитирането.",
+    "**Полярността на заемния ръст е +1** (по-бърз кредит = по-силен кредитен цикъл) "
+    "и носи СЪЩАТА двузначност като заплатите: бърз ръст е едновременно сила и риск. "
+    "Решението за двете заедно е Фаза 3.2 — дотогава го казвай изрично в текста.",
 ]
+
+
+def _thin_window_notes(lens_reports: dict) -> list[str]:
+    """Динамични бележки за сериите с къс прозорец (мандат №39 §А3).
+
+    Флагът идва от скоринга, не от ръчен списък — ако утре серията порасне над
+    прага, бележката изчезва сама.
+    """
+    notes: list[str] = []
+    for rep in lens_reports.values():
+        for s in rep.get("series", []):
+            if not s.get("thin_window"):
+                continue
+            notes.append(
+                f"⚠ **{s.get('name_bg', s.get('key', '?'))} — "
+                f"{s.get('percentile_window', 'къс прозорец')}:** "
+                f"{thin_window_note()}"
+            )
+    return notes
 
 
 def _lens_band(score: Optional[float]) -> str:
@@ -132,10 +166,12 @@ def generate_briefing_context(
     L.append("")
     for note in DATA_QUALITY_NOTES:
         L.append(f"- {note}")
+    for note in _thin_window_notes(lens_reports):
+        L.append(f"- {note}")
     L.append("")
     L.append("---")
     L.append("")
-    L.append("*Данни: Eurostat (НСИ и БНБ репортинг).*")
+    L.append("*Данни: Eurostat (НСИ и БНБ репортинг) · ЕЦБ Data Portal, набор BSI (БНБ репортинг).*")
 
     path = Path(output_path)
     path.parent.mkdir(parents=True, exist_ok=True)

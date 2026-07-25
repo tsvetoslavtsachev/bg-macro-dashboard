@@ -100,6 +100,56 @@ def test_data_quality_notes_name_the_known_traps():
         assert token in joined, token
 
 
+# ── Фаза 3.1: новите контактни точки (мандат №39 §А5) ────────────────────────
+
+def test_notes_name_the_ecb_source_and_its_short_history():
+    joined = " ".join(DATA_QUALITY_NOTES)
+    for token in ("BSI", "01.2022", "редономинационен"):
+        assert token in joined, token
+
+
+def test_notes_describe_the_new_lens_composition_not_single_series():
+    """Едносерийната уговорка вече НЕ е вярна за кредит/външен."""
+    joined = " ".join(DATA_QUALITY_NOTES)
+    assert "не е едносериен" in joined
+    for token in ("lending", "yields", "current_account", "trade"):
+        assert token in joined, token
+
+
+def test_short_window_series_get_a_note_in_the_export(tmp_path):
+    """Флагът от скоринга стига до бележките — не се губи по пътя."""
+    idx = pd.date_range(end="2026-06-01", periods=300, freq="MS")
+    short_idx = pd.date_range(end="2026-05-01", periods=41, freq="MS")
+    snapshot = {key: pd.Series([1.0, 3.0] * 150, index=idx) for key in SERIES_CATALOG}
+    snapshot["BG_LOANS_NFC"] = pd.Series([1.0, 3.0] * 20 + [7.0], index=short_idx)
+
+    reports = compute_lens_reports(SERIES_CATALOG, snapshot)
+    composite = compute_composite_score({l: r["score"] for l, r in reports.items()})
+    out = tmp_path / "ctx.md"
+    generate_briefing_context(
+        snapshot=snapshot, lens_reports=reports, composite=composite,
+        regime=get_regime(composite), output_path=str(out), today=date(2026, 7, 24),
+    )
+    text = out.read_text(encoding="utf-8")
+
+    assert "къс прозорец (от " in text
+    assert "z-ът подценява екстремността" in text
+    assert SERIES_CATALOG["BG_LOANS_NFC"]["name_bg"] in text
+
+
+def test_no_short_window_note_when_every_series_is_long(context):
+    """Бележката е динамична — изчезва сама, когато прозорецът порасне."""
+    text, _, _ = context
+    assert "z-ът подценява екстремността" not in text
+
+
+def test_footer_names_both_sources(context):
+    text, _, _ = context
+    last = text.splitlines()[-1]
+    assert "Eurostat" in last
+    assert "BSI" in last
+
+
 def test_context_footer_names_the_source(context):
     text, _, _ = context
     assert "Eurostat" in text.splitlines()[-1]

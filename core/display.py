@@ -6,19 +6,29 @@ core/display.py
 
 Public API:
     databrowser_url(catalog_id)          → линк към Eurostat първоизточника
+    ecb_series_url(catalog_id)           → линк към серията в ECB Data Portal
+    source_url(source, catalog_id)       → линкът според източника на серията
     fmt_value(res)                       → „5.20 %" / „95.00" (по is_rate/transform)
     months_old(last_date, today)         → възраст на наблюдението в месеци
     is_stale(last_date, schedule, today) → по-старо от 2× очаквания ритъм?
+    thin_window_note(percentile_window)  → обяснението зад ⚠ при къс прозорец
     verdict_sentence(lens_reports)       → „Тежи X (n), крепи Y (m)."
 """
 from __future__ import annotations
 
 from datetime import date
 from typing import Optional
+from urllib.parse import quote
 
 import pandas as pd
 
-from config import EUROSTAT_DATABROWSER, LENS_SUBJECTS_BG, STALE_AFTER_MONTHS
+from config import (
+    ECB_DATA_PORTAL,
+    ECB_SEARCH,
+    EUROSTAT_DATABROWSER,
+    LENS_SUBJECTS_BG,
+    STALE_AFTER_MONTHS,
+)
 
 
 def databrowser_url(catalog_id: str) -> str:
@@ -30,6 +40,30 @@ def databrowser_url(catalog_id: str) -> str:
     if not dataset:
         return ""
     return EUROSTAT_DATABROWSER.format(dataset=dataset)
+
+
+def ecb_series_url(catalog_id: str) -> str:
+    """Каталожно id `<набор>/<ключ>` → страницата на серията в ECB Data Portal.
+
+    Живо проверено 25.07.2026: порталът иска ключа С префикса на набора —
+    `/data/datasets/BSI/BSI.M.BG.…`. Без префикса адресът връща 404.
+    Ако id-то не се разложи на набор + ключ → резервно търсене в портала.
+    """
+    cid = (catalog_id or "").strip()
+    if not cid:
+        return ""
+    flow, _, key = cid.partition("/")
+    flow, key = flow.strip(), key.strip()
+    if not flow or not key:
+        return ECB_SEARCH.format(term=quote(cid, safe=""))
+    return ECB_DATA_PORTAL.format(flow=flow, key=key)
+
+
+def source_url(source: str, catalog_id: str) -> str:
+    """Линкът на серията се разклонява по източник — един вход за дисплея."""
+    if (source or "").strip().lower() == "ecb":
+        return ecb_series_url(catalog_id)
+    return databrowser_url(catalog_id)
 
 
 def fmt_value(res: dict, digits: int = 2) -> str:
@@ -72,6 +106,15 @@ def stale_note(schedule: str = "monthly") -> str:
     return (
         f"Наблюдението е по-старо от {limit} месеца — двойно над очаквания ритъм "
         f"на публикуване ({schedule}). Провери за прекъсване на серията."
+    )
+
+
+def thin_window_note(percentile_window: Optional[str] = None) -> str:
+    """Обяснението зад ⚠ при къс прозорец — едно изречение, без жаргон."""
+    where = f" ({percentile_window})" if percentile_window else ""
+    return (
+        f"Нормата е върху къс, изцяло бум период{where} — z-ът подценява "
+        f"екстремността."
     )
 
 

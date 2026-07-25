@@ -8,7 +8,7 @@ catalog/series.py
 from __future__ import annotations
 from typing import Any
 
-ALLOWED_SOURCES = {"eurostat", "nsi", "bnb", "derived"}
+ALLOWED_SOURCES = {"eurostat", "ecb", "nsi", "bnb", "derived"}
 ALLOWED_REGIONS = {"BG", "EU"}
 ALLOWED_LENSES = {"labor", "inflation", "growth", "credit", "external"}
 ALLOWED_TRANSFORMS = {"level", "yoy_pct", "mom_pct", "qoq_pct", "z_score", "first_diff", "roll4q_mean"}
@@ -184,7 +184,25 @@ SERIES_CATALOG: dict[str, dict[str, Any]] = {
         "revision_prone": True,
         "narrative_hint": "Показва външните дисбаланси на икономиката.",
     },
-    
+    "BG_TRADE_GS": {
+        "source": "eurostat",
+        "id": "bop_gdp6_q?geo=BG&bop_item=GS&stk_flow=BAL&partner=WRL_REST",
+        "region": "BG",
+        "name_bg": "Търговски баланс — стоки и услуги (% от БВП, 4-тримесечна плъзгаща)",
+        "name_en": "Trade Balance, Goods and Services to GDP",
+        "lens": ["external"],
+        "peer_group": "trade",
+        "tags": [],
+        "transform": "roll4q_mean",
+        "is_rate": True,
+        "historical_start": "2000-01-01",
+        "release_schedule": "quarterly",
+        "typical_release": "end_quarter",
+        "revision_prone": True,
+        "narrative_hint": "Търговската компонента на текущата сметка — разделя дефицита, "
+                          "воден от стоки и услуги, от дохода и трансферите.",
+    },
+
     # ════════════════════════════════════════════════════════
     # CREDIT / FINANCIAL
     # ════════════════════════════════════════════════════════
@@ -204,6 +222,46 @@ SERIES_CATALOG: dict[str, dict[str, Any]] = {
         "typical_release": "mid_month",
         "revision_prone": False,
         "narrative_hint": "Критерий от Маастрихт за конвергенция. Отразява цената на държавния дълг.",
+    },
+    # БНБ кредитната статистика минава през набора BSI на ECB Data Portal.
+    # Порталът е ПРАЗЕН преди 01.2022 за България (проверено с wildcard +
+    # startPeriod), затова `historical_start` е 2022 — нормата е върху къс,
+    # изцяло бум период и скорерът го маркира с `thin_window`.
+    "BG_LOANS_NFC": {
+        "source": "ecb",
+        "id": "BSI/M.BG.N.A.A20.A.1.U6.2240.Z01.E",
+        "region": "BG",
+        "name_bg": "Кредит за нефинансови предприятия (г/г)",
+        "name_en": "Loans to Non-Financial Corporations (YoY)",
+        "lens": ["credit"],
+        "peer_group": "lending",
+        "tags": [],
+        "transform": "yoy_pct",
+        "is_rate": False,
+        "historical_start": "2022-01-01",
+        "release_schedule": "monthly",
+        "typical_release": "end_month",
+        "revision_prone": False,
+        "narrative_hint": "Кредитният цикъл е двигател на търсенето — бърз ръст е "
+                          "едновременно сила и риск.",
+    },
+    "BG_LOANS_HH": {
+        "source": "ecb",
+        "id": "BSI/M.BG.N.A.A20.A.1.U6.2250.Z01.E",
+        "region": "BG",
+        "name_bg": "Кредит за домакинствата (г/г)",
+        "name_en": "Loans to Households (YoY)",
+        "lens": ["credit"],
+        "peer_group": "lending",
+        "tags": [],
+        "transform": "yoy_pct",
+        "is_rate": False,
+        "historical_start": "2022-01-01",
+        "release_schedule": "monthly",
+        "typical_release": "end_month",
+        "revision_prone": False,
+        "narrative_hint": "Кредитът за домакинствата храни потреблението и жилищния "
+                          "пазар — бърз ръст е едновременно сила и риск.",
     },
 }
 

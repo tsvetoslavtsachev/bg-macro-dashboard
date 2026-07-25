@@ -13,8 +13,13 @@ OUTPUT_DIR = BASE_DIR / "output"
 
 # ─── API Endpoints ───────────────────────────────────────────────────────────
 EUROSTAT_API_BASE = os.environ.get(
-    "EUROSTAT_API_BASE", 
+    "EUROSTAT_API_BASE",
     "https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data"
+)
+# ECB Data Portal (SDMX REST). БНБ кредитната статистика тече оттук, в набора BSI.
+ECB_API_BASE = os.environ.get(
+    "ECB_API_BASE",
+    "https://data-api.ecb.europa.eu/service"
 )
 BNB_EXCHANGE_API = "https://www.bnb.bg/Statistics/StExternalSector/StExchangeRates/StERForeignCurrencies/index.htm?download=xml&lang=BG"
 NSI_API_BASE = "https://www.nsi.bg/opendata/getopendata_json.php?l=en&id="
@@ -108,6 +113,13 @@ LENS_SUBJECTS_BG = {
 EUROSTAT_DATABROWSER = (
     "https://ec.europa.eu/eurostat/databrowser/view/{dataset}/default/table?lang=en"
 )
+
+# ECB Data Portal — страницата на КОНКРЕТНАТА серия. Живо проверено 25.07.2026:
+# ключът се повтаря с префикса на набора (`BSI/BSI.M.BG.…`); адресът без
+# префикса (`/datasets/BSI/M.BG.…`) връща 404.
+ECB_DATA_PORTAL = "https://data.ecb.europa.eu/data/datasets/{flow}/{flow}.{key}"
+# Резервният адрес, ако каталожното id не се разложи на набор + ключ.
+ECB_SEARCH = "https://data.ecb.europa.eu/search-results?searchTerm={term}"
 
 # ─── Застояло наблюдение: 2× очаквания ритъм на публикуване ──────────────────
 STALE_AFTER_MONTHS = {

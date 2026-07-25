@@ -135,6 +135,66 @@ def test_every_configured_lens_appears_in_the_report():
     assert set(reports) == set(MODULE_WEIGHTS)
 
 
+def test_two_series_in_one_peer_group_produce_one_signal():
+    """Мандат №39 §А2: двата заема НЕ гласуват поотделно в лещата.
+
+    Групата дава средното на своите серии; лещата претегля ГРУПИТЕ. Иначе
+    кредитирането щеше да надтежи доходността 2:1.
+    """
+    catalog = {
+        "L1": {"lens": ["credit"], "peer_group": "lending", "transform": "level",
+               "name_bg": "Заеми 1", "id": "BSI/K1"},
+        "L2": {"lens": ["credit"], "peer_group": "lending", "transform": "level",
+               "name_bg": "Заеми 2", "id": "BSI/K2"},
+        "Y": {"lens": ["credit"], "peer_group": "yields", "transform": "level",
+              "name_bg": "Доходност", "id": "irt?geo=BG"},
+    }
+    snapshot = {
+        "L1": _monthly([1.0, 3.0] * 60 + [7.0]),
+        "L2": _monthly([1.0, 3.0] * 60 + [6.0]),
+        "Y": _monthly([1.0, 3.0] * 60 + [2.0]),
+    }
+    rep = compute_lens_reports(catalog, snapshot)["credit"]
+
+    groups = {pg["name"]: pg for pg in rep["peer_groups"]}
+    assert set(groups) == {"lending", "yields"}
+    assert groups["lending"]["n_available"] == 2
+
+    zs = {s["key"]: s["health_z"] for s in rep["series"]}
+    lending_z = (zs["L1"] + zs["L2"]) / 2
+    assert groups["lending"]["health_z"] == pytest.approx(round(lending_z, 3))
+
+    # Лещата = средно на ДВЕТЕ групи, не на трите серии
+    expected_lens_z = (lending_z + zs["Y"]) / 2
+    assert rep["health_z"] == pytest.approx(round(expected_lens_z, 3), abs=0.001)
+
+    three_series_mean = (zs["L1"] + zs["L2"] + zs["Y"]) / 3
+    assert rep["health_z"] != pytest.approx(round(three_series_mean, 3))
+
+
+def test_adding_a_second_loan_does_not_double_the_lending_weight():
+    """Един заем срещу два в същата група → групата тежи еднакво в лещата."""
+    one = {
+        "L1": {"lens": ["credit"], "peer_group": "lending", "transform": "level",
+               "name_bg": "Заеми 1", "id": "BSI/K1"},
+        "Y": {"lens": ["credit"], "peer_group": "yields", "transform": "level",
+              "name_bg": "Доходност", "id": "irt?geo=BG"},
+    }
+    two = dict(one)
+    two["L2"] = {"lens": ["credit"], "peer_group": "lending", "transform": "level",
+                 "name_bg": "Заеми 2", "id": "BSI/K2"}
+
+    snapshot = {
+        "L1": _monthly([1.0, 3.0] * 60 + [7.0]),
+        "L2": _monthly([1.0, 3.0] * 60 + [7.0]),   # идентичен на L1
+        "Y": _monthly([1.0, 3.0] * 60 + [2.0]),
+    }
+
+    z_one = compute_lens_reports(one, snapshot)["credit"]["health_z"]
+    z_two = compute_lens_reports(two, snapshot)["credit"]["health_z"]
+    assert z_one == pytest.approx(z_two)
+
+
 def test_series_entries_carry_the_catalog_metadata():
     snapshot = {"A": _monthly([1.0, 3.0] * 60 + [2.0])}
     entry = compute_lens_reports(_mini_catalog(), snapshot)["growth"]["series"][0]

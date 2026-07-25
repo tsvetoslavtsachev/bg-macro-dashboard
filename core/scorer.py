@@ -45,6 +45,13 @@ TANH_SLOPE = 2.0        # score = 50·(1+tanh(z_h/SLOPE)); ±2σ ≈ 88/12
 CLIP_SIGMA = 6.0        # клип при scale_fallback (пълна история вместо 10г)
 PCT_TRANSFORMS = {"yoy_pct", "mom_pct", "qoq_pct"}
 
+# ── Честният къс прозорец (мандат №39 §А3) ───────────────────────────────────
+# Ако реалният обхват на данните в прозореца покрива по-малко от този дял от
+# `window_years`, „10г" е ЛЪЖА за прозореца. Тогава етикетът казва откога тече
+# нормата и се вдига флаг `thin_window` — z-ът е спрямо къс период и подценява
+# екстремността, ако този период е бил еднопосочен (напр. кредитен бум).
+THIN_WINDOW_FRACTION = 0.70
+
 
 # ═════════════════════════════════════════════════════════════════════════════
 # СЕРИЯ → SCORE
@@ -82,6 +89,28 @@ def _trailing_window(s: pd.Series, window_years: int) -> pd.Series:
     return s
 
 
+def _window_span_years(win: pd.Series) -> Optional[float]:
+    """Реалният обхват на прозореца в години (None при не-времеви индекс)."""
+    if not isinstance(win.index, pd.DatetimeIndex) or len(win) == 0:
+        return None
+    if len(win) == 1:
+        return 0.0
+    return float((win.index[-1] - win.index[0]).days) / 365.25
+
+
+def _window_label(win: pd.Series, window_years: int, wide_label: str) -> tuple[str, bool]:
+    """Етикет на прозореца + флагът `thin_window`.
+
+    Къс обхват → „къс прозорец (от YYYY-MM)" вместо „10г"/„пълна история":
+    уредът казва откога тече нормата, вместо да твърди прозорец, който няма.
+    """
+    span = _window_span_years(win)
+    if span is None or span >= THIN_WINDOW_FRACTION * window_years:
+        return wide_label, False
+    start = win.index[0].strftime("%Y-%m")
+    return f"къс прозорец (от {start})", True
+
+
 def _polarity_repr(polarity: Any) -> str:
     """Стрингов repr (избягва tuple в JSON/HTML)."""
     if is_u_shaped(polarity):
@@ -106,6 +135,7 @@ def _empty_score(name: str) -> dict:
         "history_n": 0,
         "scale_fallback": False,
         "degenerate": True,
+        "thin_window": False,
     }
 
 
@@ -154,14 +184,16 @@ def score_series(
         used_window = 200
 
     if stats is None:          # твърде къса дори за fallback → неутрално
+        label, thin = _window_label(transformed, window_years, "пълна история")
         out = _empty_score(name)
         out.update({
             "score": 50.0, "health_z": 0.0, "percentile": 50.0,
-            "percentile_window": "пълна история",
+            "percentile_window": label,
             "value": scored_val, "display_value": round(scored_val, 4),
             "display_is_pct": is_pct, "last_date": last_date,
             "transform": transform, "polarity": _polarity_repr(polarity),
             "history_n": len(transformed),
+            "thin_window": thin,
         })
         return out
 
@@ -194,9 +226,10 @@ def score_series(
             z_raw = float(np.clip(z_raw, -CLIP_SIGMA, CLIP_SIGMA))
 
     score = round(50.0 * (1.0 + math.tanh(hz / TANH_SLOPE)), 1)
-    percentile_window = (
+    wide_label = (
         "пълна история" if (scale_fallback or used_window != window_years) else f"{window_years}г"
     )
+    percentile_window, thin_window = _window_label(win, window_years, wide_label)
 
     return {
         "name": name or (s_raw.name or "unknown"),
@@ -214,6 +247,7 @@ def score_series(
         "history_n": len(win),
         "scale_fallback": scale_fallback,
         "degenerate": degenerate,
+        "thin_window": thin_window,
     }
 
 

@@ -34,3 +34,56 @@ def test_esi_points_to_full_history_dataset():
 
 def test_current_account_is_four_quarter_rolling():
     assert SERIES_CATALOG["BG_CA_GDP"]["transform"] == "roll4q_mean"
+
+
+# ── Фаза 3.1: БНБ сериите (мандат №39 §А2) ───────────────────────────────────
+
+def test_catalog_carries_thirteen_series():
+    assert len(SERIES_CATALOG) == 13
+
+
+def test_loan_series_come_from_the_ecb_bsi_dataset():
+    """БНБ кредитната статистика не е в Eurostat — тече в набора BSI на ЕЦБ."""
+    assert SERIES_CATALOG["BG_LOANS_NFC"]["source"] == "ecb"
+    assert SERIES_CATALOG["BG_LOANS_NFC"]["id"] == "BSI/M.BG.N.A.A20.A.1.U6.2240.Z01.E"
+    assert SERIES_CATALOG["BG_LOANS_HH"]["source"] == "ecb"
+    assert SERIES_CATALOG["BG_LOANS_HH"]["id"] == "BSI/M.BG.N.A.A20.A.1.U6.2250.Z01.E"
+
+
+def test_loan_series_are_read_as_growth_rates():
+    for key in ("BG_LOANS_NFC", "BG_LOANS_HH"):
+        assert SERIES_CATALOG[key]["transform"] == "yoy_pct", key
+        assert SERIES_CATALOG[key]["is_rate"] is False, key
+        assert SERIES_CATALOG[key]["release_schedule"] == "monthly", key
+
+
+def test_loan_history_starts_in_2022_because_the_portal_is_empty_before_that():
+    for key in ("BG_LOANS_NFC", "BG_LOANS_HH"):
+        assert SERIES_CATALOG[key]["historical_start"] == "2022-01-01", key
+
+
+def test_both_loans_share_one_peer_group():
+    """Двата заема са ЕДИН кредитен сигнал, не два — иначе кредитирането
+    надтежава доходността в лещата."""
+    assert SERIES_CATALOG["BG_LOANS_NFC"]["peer_group"] == "lending"
+    assert SERIES_CATALOG["BG_LOANS_HH"]["peer_group"] == "lending"
+
+
+def test_credit_lens_is_three_series_in_two_peer_groups():
+    credit = {k: v for k, v in SERIES_CATALOG.items() if "credit" in v["lens"]}
+    assert set(credit) == {"BG_LT_RATE", "BG_LOANS_NFC", "BG_LOANS_HH"}
+    assert {v["peer_group"] for v in credit.values()} == {"yields", "lending"}
+
+
+def test_external_lens_is_two_series_in_two_peer_groups():
+    external = {k: v for k, v in SERIES_CATALOG.items() if "external" in v["lens"]}
+    assert set(external) == {"BG_CA_GDP", "BG_TRADE_GS"}
+    assert {v["peer_group"] for v in external.values()} == {"current_account", "trade"}
+
+
+def test_trade_balance_is_the_goods_and_services_balance():
+    spec = SERIES_CATALOG["BG_TRADE_GS"]
+    assert spec["source"] == "eurostat"
+    assert "bop_gdp6_q" in spec["id"]
+    assert "bop_item=GS" in spec["id"]
+    assert spec["transform"] == "roll4q_mean"

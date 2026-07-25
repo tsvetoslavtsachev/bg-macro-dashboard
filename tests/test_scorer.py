@@ -13,7 +13,12 @@ import pandas as pd
 import pytest
 
 from core.primitives import robust_stats_latest
-from core.scorer import TANH_SLOPE, percentile_rank, score_series
+from core.scorer import (
+    TANH_SLOPE,
+    THIN_WINDOW_FRACTION,
+    percentile_rank,
+    score_series,
+)
 
 
 def _monthly(values):
@@ -159,3 +164,49 @@ def test_empty_series_returns_empty_score():
     assert res["score"] is None
     assert res["health_z"] is None
     assert res["name"] == "X"
+    assert res["thin_window"] is False
+
+
+# ── Честният къс прозорец (мандат №39 §А3) ───────────────────────────────────
+
+def test_short_series_does_not_claim_a_ten_year_window():
+    """Заемите: ~3.4 г. данни в 10-годишен прозорец. „10г" би било лъжа."""
+    s = _monthly([1.0, 3.0] * 20 + [7.0])          # 41 месеца ≈ 3.4 г.
+    res = score_series(s, "level", +1, history_start="2000-01-01")
+
+    assert res["thin_window"] is True
+    assert res["percentile_window"].startswith("къс прозорец (от ")
+    assert "10г" not in res["percentile_window"]
+
+
+def test_short_window_label_says_when_the_norm_starts():
+    s = _monthly([1.0, 3.0] * 20 + [7.0])
+    start = s.index[0].strftime("%Y-%m")
+    assert score_series(s, "level", +1)["percentile_window"] == (
+        f"къс прозорец (от {start})"
+    )
+
+
+def test_a_full_window_is_not_flagged_as_thin():
+    s = _monthly([1.0, 3.0] * 60 + [2.0])          # 121 месеца = 10 г.
+    res = score_series(s, "level", +1)
+
+    assert res["thin_window"] is False
+    assert res["percentile_window"] == "10г"
+
+
+def test_thin_flag_does_not_change_the_score_itself():
+    """Флагът е ЧЕСТНОСТ за прозореца, не корекция на числото."""
+    s = _monthly([1.0, 3.0] * 20 + [7.0])
+    res = score_series(s, "level", +1)
+
+    val, med, scale = robust_stats_latest(s)
+    expected = 50.0 * (1.0 + math.tanh(((val - med) / scale) / TANH_SLOPE))
+    assert res["score"] == pytest.approx(round(expected, 1))
+
+
+def test_threshold_is_seventy_percent_of_the_window():
+    assert THIN_WINDOW_FRACTION == pytest.approx(0.70)
+    # 8 години в 10-годишен прозорец → над прага, не е тънък
+    wide = score_series(_monthly([1.0, 3.0] * 48 + [2.0]), "level", +1)
+    assert wide["thin_window"] is False

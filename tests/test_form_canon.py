@@ -13,7 +13,14 @@ import pytest
 
 from catalog.series import SERIES_CATALOG
 from config import LENS_BADGES_BG, LENS_NAMES_BG, LENS_SUBJECTS_BG, MODULE_WEIGHTS
-from core.display import databrowser_url, is_stale, months_old, verdict_sentence
+from core.display import (
+    databrowser_url,
+    ecb_series_url,
+    is_stale,
+    months_old,
+    source_url,
+    verdict_sentence,
+)
 from export.weekly_briefing import generate_html
 
 
@@ -26,15 +33,51 @@ def test_databrowser_url_uses_the_dataset_before_the_query():
     )
 
 
-def test_every_catalog_series_yields_a_databrowser_url():
+def test_every_catalog_series_yields_a_first_source_url():
+    """Всяко име води към ПЪРВОИЗТОЧНИКА си — Eurostat или ЕЦБ, не смес."""
+    expected_prefix = {
+        "eurostat": "https://ec.europa.eu/eurostat/databrowser/view/",
+        "ecb": "https://data.ecb.europa.eu/data/datasets/",
+    }
     for key, spec in SERIES_CATALOG.items():
-        url = databrowser_url(spec["id"])
-        assert url.startswith("https://ec.europa.eu/eurostat/databrowser/view/"), key
-        assert "?" in spec["id"] or url  # id без query също трябва да работи
+        source = spec["source"]
+        assert source in expected_prefix, key
+        url = source_url(source, spec["id"])
+        assert url.startswith(expected_prefix[source]), key
 
 
 def test_databrowser_url_is_empty_for_a_missing_id():
     assert databrowser_url("") == ""
+
+
+# ── Линкът се разклонява по източник (мандат №39 §А4) ────────────────────────
+
+def test_ecb_url_repeats_the_dataset_prefix_in_the_key():
+    """Живо проверено 25.07.2026: без префикса на набора адресът е 404."""
+    url = ecb_series_url("BSI/M.BG.N.A.A20.A.1.U6.2240.Z01.E")
+    assert url == (
+        "https://data.ecb.europa.eu/data/datasets/BSI/"
+        "BSI.M.BG.N.A.A20.A.1.U6.2240.Z01.E"
+    )
+
+
+def test_source_url_sends_eurostat_series_to_the_databrowser():
+    spec = SERIES_CATALOG["BG_GDP_YOY"]
+    assert source_url(spec["source"], spec["id"]) == databrowser_url(spec["id"])
+
+
+def test_source_url_sends_ecb_series_to_the_data_portal():
+    spec = SERIES_CATALOG["BG_LOANS_NFC"]
+    url = source_url(spec["source"], spec["id"])
+    assert "data.ecb.europa.eu" in url
+    assert "eurostat" not in url
+
+
+def test_ecb_url_falls_back_to_search_without_a_dataset_and_key():
+    """Каталожно id без '/' не се разлага — вместо счупен линк даваме търсене."""
+    url = ecb_series_url("M.BG.N.A.A20.A.1.U6.2240.Z01.E")
+    assert url.startswith("https://data.ecb.europa.eu/search-results?searchTerm=")
+    assert ecb_series_url("") == ""
 
 
 # ── Изводът първо ────────────────────────────────────────────────────────────
@@ -122,7 +165,7 @@ def rendered(tmp_path):
 
 def test_html_links_every_indicator_name_to_the_source(rendered):
     for spec in SERIES_CATALOG.values():
-        assert databrowser_url(spec["id"]) in rendered
+        assert source_url(spec["source"], spec["id"]) in rendered
 
 
 def test_html_carries_the_narrative_hint_as_a_tooltip(rendered):
@@ -152,6 +195,41 @@ def test_html_uses_the_bulgarian_lens_badges(rendered):
 def test_html_module_bars_use_the_shared_vocabulary(rendered):
     for name in LENS_NAMES_BG.values():
         assert name in rendered
+
+
+def test_html_flags_a_short_window_with_a_tooltip(tmp_path):
+    """Мандат №39 §А3: ⚠ + едно изречение защо нормата не е 10-годишна."""
+    from core.scorer import compute_composite_score, compute_lens_reports, get_regime
+
+    idx = pd.date_range(end="2026-06-01", periods=300, freq="MS")
+    short_idx = pd.date_range(end="2026-05-01", periods=41, freq="MS")
+    snapshot = {key: pd.Series([1.0, 3.0] * 150, index=idx) for key in SERIES_CATALOG}
+    snapshot["BG_LOANS_NFC"] = pd.Series([1.0, 3.0] * 20 + [7.0], index=short_idx)
+
+    reports = compute_lens_reports(SERIES_CATALOG, snapshot)
+    composite = compute_composite_score({l: r["score"] for l, r in reports.items()})
+    out = tmp_path / "index.html"
+    generate_html(snapshot, reports, composite, get_regime(composite), str(out))
+    html = out.read_text(encoding="utf-8")
+
+    assert 'class="thin"' in html
+    assert "z-ът подценява екстремността" in html
+    assert "къс прозорец (от " in html
+
+
+def test_html_does_not_flag_a_thin_window_when_every_series_is_long(rendered):
+    assert 'class="thin" title=' not in rendered
+
+
+def test_html_explains_the_short_window_in_the_methodology(rendered):
+    """Обяснението стои ПРИ уреда, не в друг документ (ФОРМА-КАНОН)."""
+    assert "Къс прозорец при кредитните серии" in rendered
+    assert "01.2022" in rendered
+
+
+def test_html_footer_names_the_ecb_portal(rendered):
+    assert "data.ecb.europa.eu" in rendered
+    assert "ec.europa.eu/eurostat" in rendered
 
 
 def test_html_flags_a_stale_observation(tmp_path):

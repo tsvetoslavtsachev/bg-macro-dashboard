@@ -12,7 +12,13 @@ import pandas as pd
 
 from config import LENS_BADGES_BG, LENS_NAMES_BG, MACRO_REGIMES, MODULE_WEIGHTS
 from catalog.series import SERIES_CATALOG
-from core.display import databrowser_url, is_stale, stale_note, verdict_sentence
+from core.display import (
+    is_stale,
+    source_url,
+    stale_note,
+    thin_window_note,
+    verdict_sentence,
+)
 from core.primitives import apply_transform
 
 
@@ -114,7 +120,7 @@ def generate_html(
         lens = spec["lens"][0] if spec.get("lens") else "growth"
         badge = LENS_BADGES_BG.get(lens, lens)
         hint = _html.escape(spec.get("narrative_hint", "") or "")
-        url = databrowser_url(spec.get("id", ""))
+        url = source_url(spec.get("source", ""), spec.get("id", ""))
         name_html = _html.escape(spec["name_bg"])
         if url:
             name_html = (
@@ -154,6 +160,12 @@ def generate_html(
             delta_str = f'{sign}{delta:.2f}'
         res = results.get(key, {})
         score_val = res.get("score")
+        thin_mark = ""
+        if res.get("thin_window"):
+            thin_mark = (
+                f'<span class="thin" title="'
+                f'{_html.escape(thin_window_note(res.get("percentile_window")))}">⚠</span> '
+            )
         rows_html += f"""
             <tr onclick="showChart('{key}')" style="cursor:pointer">
                 {name_cell}
@@ -161,7 +173,7 @@ def generate_html(
                 <td>{last_date}</td>
                 <td><b>{last_val:.2f}</b></td>
                 <td class="{delta_cls}">{delta_str}</td>
-                <td style="color:{_score_color(score_val)}"><b>{_fmt_score(score_val)}</b></td>
+                <td style="color:{_score_color(score_val)}">{thin_mark}<b>{_fmt_score(score_val)}</b></td>
             </tr>"""
 
     # ── Module score bars ────────────────────────────────────────────────────
@@ -234,6 +246,7 @@ def generate_html(
   .ind-name a {{ border-bottom:1px dotted rgba(124,106,247,0.5); }}
   .ind-name a:hover {{ border-bottom-color:var(--accent); }}
   .stale {{ color:#ff9800; cursor:help; }}
+  .thin {{ color:#ff9800; cursor:help; }}
 
   /* Module bars */
   .modules-card {{ background:var(--card); border-radius:12px; padding:24px; margin-bottom:30px; border:1px solid var(--border); }}
@@ -287,7 +300,7 @@ def generate_html(
   <div class="header">
     <div class="header-left">
       <h1>🇧🇬 Българска Макроикономика</h1>
-      <div class="sub">Данни от НСИ и БНБ (чрез Eurostat) · Автоматично обновяване</div>
+      <div class="sub">Данни от НСИ и БНБ (чрез Eurostat и ЕЦБ) · Автоматично обновяване</div>
     </div>
     <div class="header-right">
       <div class="updated">Генериран {generated_str} · Данни към {as_of_str}</div>
@@ -305,7 +318,7 @@ def generate_html(
       <div class="verdict">{verdict}</div>
       <div class="regime-desc">
         Композитен макроикономически резултат за България по {len(SERIES_CATALOG)} ключови
-        индикатора от Eurostat (НСИ и БНБ данни). 50 = близката 10-годишна норма;
+        индикатора от Eurostat и ЕЦБ (НСИ и БНБ данни). 50 = близката 10-годишна норма;
         по-високо = по-здраво.
       </div>
     </div>
@@ -351,7 +364,16 @@ def generate_html(
       ред показва своя период; <span class="stale">⚠</span> означава наблюдение
       по-старо от двойния очакван ритъм на публикуване (месечни &gt; 2 месеца,
       тримесечни &gt; 6 месеца). Имената на индикаторите водят към набора в
-      Eurostat databrowser.
+      Eurostat databrowser, а кредитните серии — към серията в ECB Data Portal.
+    </p>
+
+    <h4>Къс прозорец при кредитните серии</h4>
+    <p>
+      <span class="thin">⚠</span> до скора значи, че нормата НЕ е върху 10 години.
+      Кредитната статистика на БНБ тече в набора BSI на ЕЦБ и започва от
+      <b>01.2022</b> — прозорецът е къс и изцяло в бум период, затова
+      <code>z</code>-ът подценява екстремността. Етикетът на серията казва откога
+      тече нормата, вместо да твърди „10г".
     </p>
   </details>
 
@@ -387,7 +409,8 @@ def generate_html(
 </div>
 
 <footer>
-  Данните са от <a href="https://ec.europa.eu/eurostat" target="_blank">Eurostat</a> (НСИ и БНБ репортинг) ·
+  Данните са от <a href="https://ec.europa.eu/eurostat" target="_blank">Eurostat</a> (НСИ и БНБ репортинг)
+  и <a href="https://data.ecb.europa.eu/data/datasets/BSI" target="_blank">ЕЦБ Data Portal</a> (набор BSI) ·
   Генериран {generated_str} · Данни към {as_of_str} ·
   <a href="https://github.com/tsvetoslavtsachev/bg-macro-dashboard" target="_blank">GitHub</a>
 </footer>
