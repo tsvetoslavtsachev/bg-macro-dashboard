@@ -54,12 +54,20 @@ def test_loan_series_are_read_as_growth_rates():
     for key in ("BG_LOANS_NFC", "BG_LOANS_HH"):
         assert SERIES_CATALOG[key]["transform"] == "yoy_pct", key
         assert SERIES_CATALOG[key]["is_rate"] is False, key
-        assert SERIES_CATALOG[key]["release_schedule"] == "monthly", key
 
 
-def test_loan_history_starts_in_2022_because_the_portal_is_empty_before_that():
+# ── Мандат №41: дългата кредитна памет ───────────────────────────────────────
+
+def test_loan_series_are_quarterly_after_the_bnb_seed():
+    """Цената на дългата памет: лещата се опреснява на тримесечие."""
     for key in ("BG_LOANS_NFC", "BG_LOANS_HH"):
-        assert SERIES_CATALOG[key]["historical_start"] == "2022-01-01", key
+        assert SERIES_CATALOG[key]["release_schedule"] == "quarterly", key
+
+
+def test_loan_history_starts_at_the_bnb_seed_not_at_the_ecb_portal():
+    """БНБ „Кредитна динамика“ дава 2005Q4+; ЕЦБ порталът тръгва чак от 2022."""
+    for key in ("BG_LOANS_NFC", "BG_LOANS_HH"):
+        assert SERIES_CATALOG[key]["historical_start"] == "2005-12-01", key
 
 
 def test_both_loans_share_one_peer_group():

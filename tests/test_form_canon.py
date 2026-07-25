@@ -221,10 +221,22 @@ def test_html_does_not_flag_a_thin_window_when_every_series_is_long(rendered):
     assert 'class="thin" title=' not in rendered
 
 
-def test_html_explains_the_short_window_in_the_methodology(rendered):
-    """Обяснението стои ПРИ уреда, не в друг документ (ФОРМА-КАНОН)."""
-    assert "Къс прозорец при кредитните серии" in rendered
+def test_html_explains_the_credit_splice_in_the_methodology(rendered):
+    """Обяснението стои ПРИ уреда, не в друг документ (ФОРМА-КАНОН).
+
+    Мандат №41: лицето вече описва ШЕВА (БНБ seed + ЕЦБ BSI), а не късия
+    прозорец — иначе методологията щеше да твърди нещо, което вече не е вярно.
+    """
+    assert "Дългата кредитна памет" in rendered
+    assert "2005Q4" in rendered
     assert "01.2022" in rendered
+    assert "0.5%" in rendered
+
+
+def test_html_keeps_the_generic_thin_window_explanation(rendered):
+    """⚠ механизмът остава — просто вече не сочи към кредитните серии."""
+    assert "Къс прозорец" in rendered
+    assert "подценява екстремността" in rendered
 
 
 def test_html_footer_names_the_ecb_portal(rendered):

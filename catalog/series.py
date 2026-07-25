@@ -223,10 +223,16 @@ SERIES_CATALOG: dict[str, dict[str, Any]] = {
         "revision_prone": False,
         "narrative_hint": "Критерий от Маастрихт за конвергенция. Отразява цената на държавния дълг.",
     },
-    # БНБ кредитната статистика минава през набора BSI на ECB Data Portal.
-    # Порталът е ПРАЗЕН преди 01.2022 за България (проверено с wildcard +
-    # startPeriod), затова `historical_start` е 2022 — нормата е върху къс,
-    # изцяло бум период и скорерът го маркира с `thin_window`.
+    # ── Дългата кредитна памет (мандат №41) ──────────────────────────────────
+    # ECB Data Portal (набор BSI) е ПРАЗЕН преди 01.2022 за България (проверено
+    # с wildcard + startPeriod). Първоизточникът обаче ги има: БНБ „Кредитна
+    # динамика“ публикува същите редове ТРИМЕСЕЧНО от 2005Q4. Затова сериите се
+    # зашиват в `sources/manual_seed.py` — seed отпред, завършените BSI
+    # тримесечия отзад, шевът валидиран ≤0.5% на всички общи тримесечия
+    # (припокриването е 0.00%: БНБ репортва точно този поток към ЕЦБ).
+    # Следствия: `release_schedule` е "quarterly" (лещата се опреснява на
+    # тримесечие), `historical_start` е 2005-12-01, а нормата вече е ПЪЛНА
+    # 10-годишна — флагът `thin_window` изчезва сам.
     "BG_LOANS_NFC": {
         "source": "ecb",
         "id": "BSI/M.BG.N.A.A20.A.1.U6.2240.Z01.E",
@@ -238,9 +244,9 @@ SERIES_CATALOG: dict[str, dict[str, Any]] = {
         "tags": [],
         "transform": "yoy_pct",
         "is_rate": False,
-        "historical_start": "2022-01-01",
-        "release_schedule": "monthly",
-        "typical_release": "end_month",
+        "historical_start": "2005-12-01",
+        "release_schedule": "quarterly",
+        "typical_release": "end_quarter",
         "revision_prone": False,
         "narrative_hint": "Кредитният цикъл е двигател на търсенето — бърз ръст е "
                           "едновременно сила и риск.",
@@ -256,9 +262,9 @@ SERIES_CATALOG: dict[str, dict[str, Any]] = {
         "tags": [],
         "transform": "yoy_pct",
         "is_rate": False,
-        "historical_start": "2022-01-01",
-        "release_schedule": "monthly",
-        "typical_release": "end_month",
+        "historical_start": "2005-12-01",
+        "release_schedule": "quarterly",
+        "typical_release": "end_quarter",
         "revision_prone": False,
         "narrative_hint": "Кредитът за домакинствата храни потреблението и жилищния "
                           "пазар — бърз ръст е едновременно сила и риск.",

@@ -24,6 +24,7 @@ BASE_DIR = Path(__file__).parent
 sys.path.insert(0, str(BASE_DIR))
 
 from sources import build_adapters
+from sources.manual_seed import splice_loans
 from catalog.series import SERIES_CATALOG, series_by_source, validate_catalog
 from core.primitives import apply_transform
 from core.scorer import (
@@ -54,6 +55,10 @@ def _score_everything(force: bool = False) -> tuple[dict, dict, float | None, di
     """snapshot → лещови доклади → композит → режим. Единният път на всички команди."""
     adapters = build_adapters()
     snapshot = _build_snapshot(adapters, force=force)
+    # Дългата кредитна памет — ЕДНО място за всички консуматори (status, HTML,
+    # context export): БНБ seed 2005Q4+ отпред, завършените ЕЦБ BSI тримесечия
+    # отзад, шевът валидиран (sources/manual_seed.py).
+    snapshot = splice_loans(snapshot)
     lens_reports = compute_lens_reports(SERIES_CATALOG, snapshot)
     module_scores = {lens: rep["score"] for lens, rep in lens_reports.items()}
     composite = compute_composite_score(module_scores)

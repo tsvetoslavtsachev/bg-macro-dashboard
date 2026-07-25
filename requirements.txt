@@ -1,3 +1,7 @@
 pandas>=2.0.0
 numpy>=1.24.0
 requests>=2.31.0
+# Само за БНБ seed-а: scripts/extract_bnb_seed.py чете суровия .xlsx, а тестът
+# на екстрактора го сверява срещу комитнатата суровина. Пайплайнът в движение
+# чете вече готовия data/manual/bnb_loans_history.csv.
+openpyxl>=3.1.0

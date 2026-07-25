@@ -102,10 +102,19 @@ def test_data_quality_notes_name_the_known_traps():
 
 # ── Фаза 3.1: новите контактни точки (мандат №39 §А5) ────────────────────────
 
-def test_notes_name_the_ecb_source_and_its_short_history():
+def test_notes_name_the_ecb_source_and_the_bnb_seed_it_is_spliced_to():
+    """Мандат №41: бележката вече описва ШЕВА, не късия прозорец."""
     joined = " ".join(DATA_QUALITY_NOTES)
-    for token in ("BSI", "01.2022", "редономинационен"):
+    for token in ("BSI", "01.2022", "редономинационен", "Кредитна динамика",
+                  "2005Q4", "≤0.5%", "тримесечие"):
         assert token in joined, token
+
+
+def test_notes_no_longer_claim_a_short_window_for_the_loans():
+    """Честността се обръща: „нормата е върху къс бум прозорец“ вече е неистина."""
+    joined = " ".join(DATA_QUALITY_NOTES)
+    assert "къс, изцяло бум" not in joined
+    assert "ПОДЦЕНЯВА" not in joined
 
 
 def test_notes_describe_the_new_lens_composition_not_single_series():
