@@ -15,6 +15,7 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Optional
 
+from analysis.lens_history import HONESTY_LABEL, history_stats, yearly_table
 from config import LENS_BANDS, LENS_NAMES_BG
 from core.display import fmt_value, is_stale, thin_window_note
 
@@ -62,11 +63,18 @@ DATA_QUALITY_NOTES = [
     "**Лещовият състав вече не е едносериен.** Кредит = 4 серии в 3 peer-групи "
     "(`yields`: BG_LT_RATE · `lending`: BG_LOANS_NFC + BG_LOANS_HH — двата заема "
     "дават ЕДИН сигнал, не два · `lending_cost`: BG_LENDING_RATE). Външен сектор = "
-    "2 серии в 2 peer-групи (`current_account`: BG_CA_GDP · `trade`: BG_TRADE_GS). "
-    "Лещата е средно на peer-групите, не на сериите — затова добавянето на втори "
-    "заем не удвоява тежестта на кредитирането. В кредита трите крака често сочат "
-    "в РАЗЛИЧНИ посоки (цена на дълга · обем на кредита · цена на новия кредит) — "
-    "казвай кой крак вдига или сваля лещата, не сливай трите в едно изречение.",
+    "2 серии в ЕДНА peer-група `external_balance` (BG_CA_GDP + BG_TRADE_GS) — "
+    "**мандат №45**: балансът на стоки и услуги е ПОДМНОЖЕСТВОТО-ДВИГАТЕЛ на "
+    "дефицита по текущата сметка, т.е. същият външен шок. Отделни групи биха го "
+    "броили ДВА пъти и биха направили външната леща двойно по-уверена, отколкото "
+    "данните позволяват; затова външният сектор е ЕДИН peer сигнал, докато не "
+    "дойде ортогонална серия (туризъм/услуги). Числото не се смени от сливането — "
+    "при peer-тегла 1.0 средното на две групи по 1 серия е същото като една група "
+    "от 2 серии. Лещата е средно на peer-групите, не на сериите — затова "
+    "добавянето на втори заем не удвоява тежестта на кредитирането. В кредита "
+    "трите крака често сочат в РАЗЛИЧНИ посоки (цена на дълга · обем на кредита · "
+    "цена на новия кредит) — казвай кой крак вдига или сваля лещата, не сливай "
+    "трите в едно изречение.",
     "**Полярността на заемния ръст е +1** (по-бърз кредит = по-силен кредитен цикъл) "
     "и носи СЪЩАТА двузначност като заплатите: бърз ръст е едновременно сила и риск. "
     "Решението за двете заедно е Фаза 3.2 — дотогава го казвай изрично в текста.",
@@ -130,6 +138,79 @@ def _fmt_score(score: Optional[float]) -> str:
     return f"{score:.1f}" if score is not None else "—"
 
 
+def _fmt_delta(d: Optional[float]) -> str:
+    return f"{d:+.1f}" if d is not None else "—"
+
+
+def _history_section(history, wow) -> list[str]:
+    """„Композитът през времето" — реконструкцията + живият журнал (мандат №45).
+
+    Всяко число идва от решетката/журнала. Нула ръчни константи — включително
+    percentile-ът, min/max и годишната таблица.
+    """
+    stats = history_stats(history)
+    if stats is None and not wow:
+        return []
+
+    L: list[str] = []
+    L.append("## Композитът през времето — реконструирана история [не PIT]")
+    L.append("")
+    L.append(HONESTY_LABEL)
+    L.append("")
+
+    # ── Какво се смени: ЖИВИЯТ журнал, не реконструкцията ────────────────────
+    L.append("**Какво се смени (жив журнал):**")
+    if not wow:
+        L.append("- Първи запис в живия журнал — делтата тръгва от следващия пуск.")
+    else:
+        L.append(f"- Композит: {_fmt_delta(wow.get('composite_delta'))} "
+                 f"спрямо {wow.get('prev_date', '—')}")
+        deltas = [
+            (lens, d) for lens, d in (wow.get("lens_deltas") or {}).items()
+            if d is not None
+        ]
+        deltas.sort(key=lambda kv: abs(kv[1]), reverse=True)
+        for lens, d in deltas[:3]:
+            L.append(f"- {LENS_NAMES_BG.get(lens, lens)}: {_fmt_delta(d)}")
+        if wow.get("composition_changed"):
+            L.append("- ⚠ Съставът на уреда се смени между двата записа — "
+                     "делтата НЕ е чиста.")
+    L.append("")
+
+    if stats is None:
+        L.append("---")
+        L.append("")
+        return L
+
+    # ── Къде сме спрямо реконструкцията ──────────────────────────────────────
+    L.append("**Къде сме спрямо реконструираната история:**")
+    if stats["percentile"] is not None:
+        L.append(f"- Текущият композит ({_fmt_score(stats['current'])}) е над "
+                 f"{stats['percentile']:.1f}% от {stats['n_quarters']} тримесечни "
+                 f"точки ({stats['first_date']} → {stats['last_date']}).")
+    L.append(f"- Най-ниско: {_fmt_score(stats['min_value'])} на {stats['min_date']}")
+    L.append(f"- Най-високо: {_fmt_score(stats['max_value'])} на {stats['max_date']}")
+    L.append("")
+
+    rows = yearly_table(history)
+    if rows:
+        L.append("| Година | Среден композит | Тримесечни точки |")
+        L.append("|--------|-----------------|------------------|")
+        for r in rows:
+            L.append(f"| {r['year']} | {r['mean_composite']:.1f} | {r['n']} |")
+        L.append("")
+
+    L.append("⚠ Ранните редове стъпват на ПО-КЪСИ норми и на по-малко серии "
+             "(fallback-ите на скорера), затова сравнението 2007 срещу 2026 е "
+             "ориентир, не калибрация. Цитирай числата винаги с уговорката "
+             "„реконструирана история“; WoW делтата идва от живия журнал и е "
+             "единственият истински PIT запис.")
+    L.append("")
+    L.append("---")
+    L.append("")
+    return L
+
+
 def generate_briefing_context(
     snapshot: dict,
     lens_reports: dict,
@@ -137,6 +218,8 @@ def generate_briefing_context(
     regime: dict,
     output_path: str,
     today: Optional[date] = None,
+    history=None,
+    wow=None,
 ) -> str:
     """Генерира Markdown context и го записва. Връща пътя."""
     if today is None:
@@ -169,6 +252,9 @@ def generate_briefing_context(
     L.append("")
     L.append("---")
     L.append("")
+
+    # ── Филмът: композитът през времето (мандат №45) ─────────────────────────
+    L.extend(_history_section(history, wow))
 
     # ── Секция на всяка леща ─────────────────────────────────────────────────
     for lens, rep in lens_reports.items():

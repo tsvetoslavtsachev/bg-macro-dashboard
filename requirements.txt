@@ -5,3 +5,6 @@ requests>=2.31.0
 # на екстрактора го сверява срещу комитнатата суровина. Пайплайнът в движение
 # чете вече готовия data/manual/bnb_loans_history.csv.
 openpyxl>=3.1.0
+# Само за реконструираната лещова история: `data/lens_history.parquet`
+# (analysis/lens_history.py). Живият журнал е CSV и не иска нищо допълнително.
+pyarrow>=14.0.0

@@ -115,23 +115,47 @@ def cmd_status(args):
 
 
 def cmd_briefing(args):
-    """Генерира HTML дашборда."""
+    """Генерира HTML дашборда + обновява историята и живия журнал."""
     from export.weekly_briefing import generate_html
+    from analysis.lens_history import (
+        append_journal, build_history, load_journal, wow_delta, write_history,
+    )
 
     snapshot, lens_reports, composite, regime = _score_everything(force=args.refresh)
+
+    # Реконструираната история се пресмята от СЪЩИЯ snapshot — последният ѝ ред
+    # е тъждествен на живото изчисление отгоре.
+    history = build_history(SERIES_CATALOG, snapshot)
+    write_history(history)
+
+    # РЕДЪТ Е ВАЖЕН: append ПРЕДИ wow. Записът за днес се ЗАМЕНЯ при повторен
+    # пуск, а делтата се чете спрямо предишната ДАТА — така вторият пуск в
+    # същия ден показва същото, а не нула.
+    append_journal(lens_reports, composite)
+    wow = wow_delta(load_journal())
+
     output_file = BASE_DIR / "output" / "index.html"
-    generate_html(snapshot, lens_reports, composite, regime, str(output_file))
+    generate_html(snapshot, lens_reports, composite, regime, str(output_file),
+                  history=history, wow=wow)
     return 0
 
 
 def cmd_export_context(args):
     """Markdown context за LLM анализ (горивото на macro-deep-brief-bg)."""
     from export.briefing_context import generate_briefing_context
+    from analysis.lens_history import build_history, load_journal, wow_delta
 
     snapshot, lens_reports, composite, regime = _score_everything(force=args.refresh)
     if not snapshot:
         print("⚠ Snapshot е празен. Пусни `python run.py --status --refresh` първо.")
         return 1
+
+    # Историята се смята in-memory и НЕ се записва, журналът се ЧЕТЕ и НЕ се
+    # дописва: записът е на ритуалния момент (`--briefing`), а експортът на
+    # контекста е четец. Иначе двете команди щяха да раждат по един запис на ден
+    # и WoW делтата щеше да сравнява себе си със себе си.
+    history = build_history(SERIES_CATALOG, snapshot)
+    wow = wow_delta(load_journal())
 
     today = date.today()
     output_file = BASE_DIR / "output" / f"briefing_context_{today.isoformat()}.md"
@@ -142,6 +166,8 @@ def cmd_export_context(args):
         regime=regime,
         output_path=str(output_file),
         today=today,
+        history=history,
+        wow=wow,
     )
     return 0
 

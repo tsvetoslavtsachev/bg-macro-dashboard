@@ -18,6 +18,7 @@ from config import (
     MACRO_REGIMES,
     MODULE_WEIGHTS,
 )
+from analysis.lens_history import HONESTY_LABEL, ROW_LIVE, ROW_QUARTER
 from catalog.series import SERIES_CATALOG
 from core.display import (
     is_stale,
@@ -124,14 +125,107 @@ def _prep_chart_data(snapshot: dict) -> dict:
     return chart_data
 
 
+def _regime_bands() -> list:
+    """Режимните ленти като [{y0, y1, color}] — праговете от `MACRO_REGIMES`.
+
+    Таблицата е подредена низходящо (80 · 65 · 50 · 35 · 0); горният край на
+    всяка лента е прагът на предишната, а на най-горната — 100.
+    """
+    bands = []
+    upper = 100.0
+    for threshold, _name, color in MACRO_REGIMES:
+        bands.append({"y0": float(threshold), "y1": upper, "color": color})
+        upper = float(threshold)
+    return bands
+
+
+def _prep_film_data(history) -> dict:
+    """Решетката → JSON за филма. Смятането е ТУК, в JS остава само рисуването."""
+    if history is None or len(history) == 0:
+        return {}
+
+    q = history[history["row_type"] == ROW_QUARTER].dropna(subset=["composite"])
+    live = history[history["row_type"] == ROW_LIVE].dropna(subset=["composite"])
+
+    data = {
+        "dates": [d.strftime("%Y-%m-%d") for d in q.index],
+        "values": [round(float(v), 1) for v in q["composite"]],
+        "bands": _regime_bands(),
+        "label": HONESTY_LABEL,
+    }
+    if len(live):
+        data["live"] = {
+            "date": live.index[-1].strftime("%Y-%m-%d"),
+            "value": round(float(live["composite"].iloc[-1]), 1),
+        }
+    return data
+
+
+def _prep_wow_data(wow) -> dict:
+    """WoW делтата → готови за рисуване редове (нула аритметика в JS)."""
+    if not wow:
+        return {
+            "available": False,
+            "empty_note": "Първи запис в живия журнал — делтата тръгва от "
+                          "следващия пуск.",
+        }
+
+    def _fmt_delta(d) -> str:
+        if d is None:
+            return "—"
+        return f"{d:+.1f}"
+
+    def _cls(d) -> str:
+        if d is None or d == 0:
+            return ""
+        return "pos" if d > 0 else "neg"
+
+    try:
+        prev_human = datetime.strptime(wow["prev_date"], "%Y-%m-%d").strftime("%d.%m.%Y")
+    except (ValueError, KeyError, TypeError):
+        prev_human = str(wow.get("prev_date", "—"))
+
+    lens_deltas = wow.get("lens_deltas") or {}
+    rows = [
+        {
+            "name": LENS_NAMES_BG.get(lens, lens),
+            "delta": lens_deltas.get(lens),
+            "delta_str": _fmt_delta(lens_deltas.get(lens)),
+            "cls": _cls(lens_deltas.get(lens)),
+        }
+        for lens in MODULE_WEIGHTS
+        if lens in lens_deltas
+    ]
+    # Сортиране по |Δ| — най-голямото движение отгоре, а не азбучен ред.
+    rows.sort(key=lambda r: abs(r["delta"]) if r["delta"] is not None else -1.0,
+              reverse=True)
+
+    return {
+        "available": True,
+        "prev_date": prev_human,
+        "since": f"спрямо {prev_human}",
+        "composite_delta": wow.get("composite_delta"),
+        "composite_delta_str": _fmt_delta(wow.get("composite_delta")),
+        "composite_cls": _cls(wow.get("composite_delta")),
+        "rows": rows,
+        "composition_changed": bool(wow.get("composition_changed")),
+        "composition_note": "⚠ съставът на уреда се смени между двата записа — "
+                            "делтата не е чиста",
+    }
+
+
 def generate_html(
     snapshot: dict,
     lens_reports: dict,
     composite,
     regime: dict,
     output_path: str,
+    history=None,
+    wow=None,
 ):
     chart_data = _prep_chart_data(snapshot)
+    film_data = _prep_film_data(history)
+    wow_data = _prep_wow_data(wow)
     as_of = _compute_as_of(snapshot)
     as_of_str = as_of if as_of else "няма данни"
     today = date.today()
@@ -237,6 +331,26 @@ def generate_html(
         lens: _hex_to_rgba(color, 0.08) for lens, color in LENS_LINE_COLORS.items()
     }
 
+    # ── Филмът на композита (мандат №45) ─────────────────────────────────────
+    # Картата се появява само когато има какво да покаже — стар пуск без история
+    # не рисува празна рамка.
+    film_card = ""
+    if film_data or wow_data.get("available"):
+        film_card = f"""
+  <!-- Филмът: композитът през времето (мандат №45 П1) -->
+  <div class="card film-card">
+    <h2>Филмът: композитът през времето</h2>
+    <div class="film-label">{_html.escape(HONESTY_LABEL)}</div>
+    <div class="film-grid">
+      <div><div id="film-chart"></div></div>
+      <div class="wow-block">
+        <h3>Какво се смени тази седмица</h3>
+        <div id="wow-body"></div>
+      </div>
+    </div>
+  </div>
+"""
+
     html = f"""<!DOCTYPE html>
 <html lang="bg">
 <head>
@@ -270,6 +384,26 @@ def generate_html(
   .regime-label {{ font-size:1.5em; font-weight:600; color:{regime_color}; }}
   .regime-desc {{ color:var(--muted); font-size:0.9em; margin-top:6px; max-width:500px; }}
   .verdict {{ font-size:1.05em; font-weight:600; color:var(--text); margin-top:10px; max-width:560px; line-height:1.45; }}
+
+  /* Филмът на композита (мандат №45) */
+  .film-card {{ margin-bottom:30px; }}
+  .film-label {{ color:var(--muted); font-size:0.82em; margin:-8px 0 16px; line-height:1.5; }}
+  .film-grid {{ display:grid; grid-template-columns:2.2fr 1fr; gap:24px; align-items:start; }}
+  @media(max-width:900px) {{ .film-grid {{ grid-template-columns:1fr; }} }}
+  #film-chart {{ height:300px; }}
+  .wow-block h3 {{ font-size:0.8em; text-transform:uppercase; letter-spacing:0.6px;
+                   color:var(--muted); margin-bottom:12px; }}
+  .wow-since {{ color:var(--muted); font-size:0.78em; margin-bottom:12px; }}
+  .wow-head {{ display:flex; justify-content:space-between; align-items:baseline;
+               padding:8px 0 10px; border-bottom:1px solid var(--border); margin-bottom:8px; }}
+  .wow-head .label {{ font-size:0.85em; color:var(--text); font-weight:600; }}
+  .wow-head .val {{ font-size:1.25em; font-weight:700; }}
+  .wow-row {{ display:flex; justify-content:space-between; align-items:baseline;
+              padding:5px 0; font-size:0.85em; }}
+  .wow-row .label {{ color:var(--muted); }}
+  .wow-row .val {{ font-weight:600; }}
+  .wow-note {{ color:var(--muted); font-size:0.82em; line-height:1.5; }}
+  .wow-warn {{ color:#ff9800; font-size:0.78em; margin-top:10px; line-height:1.45; }}
 
   /* Методология */
   .methodology {{ background:var(--card); border:1px solid var(--border); border-radius:12px;
@@ -358,6 +492,7 @@ def generate_html(
     </div>
   </div>
 
+{film_card}
   <!-- Методология (ФОРМА-КАНОН: обяснението стои при уреда, не в друг документ) -->
   <details class="methodology" open>
     <summary>Как да четеш този дашборд</summary>
@@ -436,6 +571,24 @@ def generate_html(
       трета отделна peer-група (<code>lending_cost</code>) до цената на държавния
       дълг (<code>yields</code>) и обема на кредита (<code>lending</code>) —
       трите крака често сочат в различни посоки.
+    </p>
+
+    <h4>Филмът на композита</h4>
+    <p>
+      Линията НЕ е запис на това, което дашбордът е показвал тогава. Тя е
+      <b>реконструкция</b>: днешният уред — днешните дефиниции, днешните лещи и
+      тегла — пуснат върху днешните (вече <b>ревизирани</b>) данни, рязани по
+      периодната дата. Затова етикетът казва „не point-in-time": реален
+      наблюдател през 2009 е виждал други числа, друг състав и по-малко серии.
+      Решетката тръгва от <b>2005Q4</b>, защото там се ражда кредитният seed на
+      БНБ — по-рано кредитната леща пада до една серия и „историята" би мерила
+      друг уред. Ранните точки стъпват на <b>по-къси норми</b> (когато в
+      10-годишния прозорец няма 36 наблюдения, скорерът минава на пълната
+      история), затова всеки ред носи <code>n_lenses</code> и
+      <code>n_series</code> — те казват колко уред реално стои зад точката.
+      Живият запис е ДРУГ файл: <code>data/score_journal.csv</code> получава по
+      един ред на всеки ритуален пуск и оттам идва делтата „какво се смени тази
+      седмица".
     </p>
 
     <h4>Къс прозорец</h4>
@@ -577,6 +730,82 @@ function showChart(key) {{
   Plotly.react("main-chart", traces, layout, {{displayModeBar: false, responsive: true}});
   activeKey = key;
 }}
+
+// ── Филмът на композита (мандат №45) ────────────────────────────────────────
+// FILM_DATA/WOW_DATA идват ГОТОВИ от Python — тук само се рисува.
+const FILM_DATA = {json.dumps(film_data, ensure_ascii=False)};
+const WOW_DATA = {json.dumps(wow_data, ensure_ascii=False)};
+
+(function() {{
+  const el = document.getElementById("film-chart");
+  if (!el || !FILM_DATA.dates || !FILM_DATA.dates.length) return;
+
+  // Режимните ленти — праговете на композита като бледи хоризонтални полета
+  const shapes = (FILM_DATA.bands || []).map(b => ({{
+    type: "rect", xref: "paper", yref: "y",
+    x0: 0, x1: 1, y0: b.y0, y1: b.y1,
+    fillcolor: b.color, opacity: 0.06, line: {{ width: 0 }}, layer: "below"
+  }}));
+
+  const traces = [{{
+    x: FILM_DATA.dates,
+    y: FILM_DATA.values,
+    type: "scatter",
+    mode: "lines",
+    name: "композит",
+    line: {{ color: "#7c6af7", width: 2.5 }},
+    hovertemplate: "%{{x|%b %Y}}: <b>%{{y:.1f}}</b><extra></extra>"
+  }}];
+
+  if (FILM_DATA.live) {{
+    traces.push({{
+      x: [FILM_DATA.live.date],
+      y: [FILM_DATA.live.value],
+      type: "scatter",
+      mode: "markers",
+      name: "днес",
+      marker: {{ color: "#7c6af7", size: 11, line: {{ color: "#0f1117", width: 2 }} }},
+      hovertemplate: "%{{x|%b %Y}} (живо): <b>%{{y:.1f}}</b><extra></extra>"
+    }});
+  }}
+
+  const layout = {{
+    paper_bgcolor: "rgba(0,0,0,0)",
+    plot_bgcolor: "rgba(0,0,0,0)",
+    font: {{ color: "#8892a4", family: "-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif" }},
+    margin: {{ t: 10, r: 16, b: 40, l: 44 }},
+    xaxis: {{ showgrid: false, zeroline: false, color: "#8892a4" }},
+    yaxis: {{ range: [0, 100], gridcolor: "#1e2130", color: "#8892a4", dtick: 25 }},
+    shapes: shapes,
+    hovermode: "x unified",
+    showlegend: false
+  }};
+
+  Plotly.newPlot("film-chart", traces, layout, {{displayModeBar: false, responsive: true}});
+}})();
+
+(function() {{
+  const box = document.getElementById("wow-body");
+  if (!box) return;
+
+  if (!WOW_DATA.available) {{
+    box.innerHTML = '<div class="wow-note">' + WOW_DATA.empty_note + '</div>';
+    return;
+  }}
+
+  let h = '<div class="wow-since">' + WOW_DATA.since + '</div>';
+  h += '<div class="wow-head"><span class="label">Композит</span>' +
+       '<span class="val ' + WOW_DATA.composite_cls + '">' +
+       WOW_DATA.composite_delta_str + '</span></div>';
+  for (const r of WOW_DATA.rows) {{
+    h += '<div class="wow-row"><span class="label">' + r.name + '</span>' +
+         '<span class="val ' + r.cls + '">' + r.delta_str + '</span></div>';
+  }}
+  if (WOW_DATA.composition_changed) {{
+    h += '<div class="wow-warn">' + WOW_DATA.composition_note + '</div>';
+  }}
+  box.innerHTML = h;
+}})();
 
 // Radar chart
 (function() {{

@@ -22,7 +22,16 @@ def compute_yoy_pct(series: pd.Series) -> pd.Series:
     if series.empty:
         return series
         
-    freq = pd.infer_freq(series.index)
+    # `pd.infer_freq` ХВЪРЛЯ при < 3 дати („Need at least 3 dates to infer
+    # frequency"), а не връща None. Кодът отдолу вече има път за „не можах да
+    # позная" — грешката просто не стигаше до него. Мандат №45: реконструираната
+    # история реже сериите при ранните тримесечни маркове и кредитният seed има
+    # ТОЧНО една точка на 2005-12-01 → без този guard build-ът гърми.
+    # Поведението при ≥3 дати е непроменено, затова живите числа не мърдат.
+    try:
+        freq = pd.infer_freq(series.index)
+    except ValueError:
+        freq = None
     periods = 12
     if freq:
         if freq.startswith('Q'):

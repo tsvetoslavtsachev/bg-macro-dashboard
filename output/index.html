@@ -32,6 +32,26 @@
   .regime-desc { color:var(--muted); font-size:0.9em; margin-top:6px; max-width:500px; }
   .verdict { font-size:1.05em; font-weight:600; color:var(--text); margin-top:10px; max-width:560px; line-height:1.45; }
 
+  /* Филмът на композита (мандат №45) */
+  .film-card { margin-bottom:30px; }
+  .film-label { color:var(--muted); font-size:0.82em; margin:-8px 0 16px; line-height:1.5; }
+  .film-grid { display:grid; grid-template-columns:2.2fr 1fr; gap:24px; align-items:start; }
+  @media(max-width:900px) { .film-grid { grid-template-columns:1fr; } }
+  #film-chart { height:300px; }
+  .wow-block h3 { font-size:0.8em; text-transform:uppercase; letter-spacing:0.6px;
+                   color:var(--muted); margin-bottom:12px; }
+  .wow-since { color:var(--muted); font-size:0.78em; margin-bottom:12px; }
+  .wow-head { display:flex; justify-content:space-between; align-items:baseline;
+               padding:8px 0 10px; border-bottom:1px solid var(--border); margin-bottom:8px; }
+  .wow-head .label { font-size:0.85em; color:var(--text); font-weight:600; }
+  .wow-head .val { font-size:1.25em; font-weight:700; }
+  .wow-row { display:flex; justify-content:space-between; align-items:baseline;
+              padding:5px 0; font-size:0.85em; }
+  .wow-row .label { color:var(--muted); }
+  .wow-row .val { font-weight:600; }
+  .wow-note { color:var(--muted); font-size:0.82em; line-height:1.5; }
+  .wow-warn { color:#ff9800; font-size:0.78em; margin-top:10px; line-height:1.45; }
+
   /* Методология */
   .methodology { background:var(--card); border:1px solid var(--border); border-radius:12px;
                   padding:18px 24px; margin-bottom:30px; }
@@ -103,7 +123,7 @@
       <div class="sub">Данни от НСИ и БНБ (чрез Eurostat и ЕЦБ) · Автоматично обновяване</div>
     </div>
     <div class="header-right">
-      <div class="updated">Генериран 27.07.2026 · Данни към 2026-06</div>
+      <div class="updated">Генериран 28.07.2026 · Данни към 2026-06</div>
     </div>
   </div>
 
@@ -120,6 +140,20 @@
         Композитен макроикономически резултат за България по 17 ключови
         индикатора от Eurostat и ЕЦБ (НСИ и БНБ данни). 50 = близката 10-годишна норма;
         по-високо = по-здраво.
+      </div>
+    </div>
+  </div>
+
+
+  <!-- Филмът: композитът през времето (мандат №45 П1) -->
+  <div class="card film-card">
+    <h2>Филмът: композитът през времето</h2>
+    <div class="film-label">Реконструирана история — днешните дефиниции и днешните данни върху тримесечна решетка от 2005Q4; не point-in-time запис.</div>
+    <div class="film-grid">
+      <div><div id="film-chart"></div></div>
+      <div class="wow-block">
+        <h3>Какво се смени тази седмица</h3>
+        <div id="wow-body"></div>
       </div>
     </div>
   </div>
@@ -202,6 +236,24 @@
       трета отделна peer-група (<code>lending_cost</code>) до цената на държавния
       дълг (<code>yields</code>) и обема на кредита (<code>lending</code>) —
       трите крака често сочат в различни посоки.
+    </p>
+
+    <h4>Филмът на композита</h4>
+    <p>
+      Линията НЕ е запис на това, което дашбордът е показвал тогава. Тя е
+      <b>реконструкция</b>: днешният уред — днешните дефиниции, днешните лещи и
+      тегла — пуснат върху днешните (вече <b>ревизирани</b>) данни, рязани по
+      периодната дата. Затова етикетът казва „не point-in-time": реален
+      наблюдател през 2009 е виждал други числа, друг състав и по-малко серии.
+      Решетката тръгва от <b>2005Q4</b>, защото там се ражда кредитният seed на
+      БНБ — по-рано кредитната леща пада до една серия и „историята" би мерила
+      друг уред. Ранните точки стъпват на <b>по-къси норми</b> (когато в
+      10-годишния прозорец няма 36 наблюдения, скорерът минава на пълната
+      история), затова всеки ред носи <code>n_lenses</code> и
+      <code>n_series</code> — те казват колко уред реално стои зад точката.
+      Живият запис е ДРУГ файл: <code>data/score_journal.csv</code> получава по
+      един ред на всеки ритуален пуск и оттам идва делтата „какво се смени тази
+      седмица".
     </p>
 
     <h4>Къс прозорец</h4>
@@ -424,7 +476,7 @@
 <footer>
   Данните са от <a href="https://ec.europa.eu/eurostat" target="_blank">Eurostat</a> (НСИ и БНБ репортинг)
   и <a href="https://data.ecb.europa.eu/data/datasets/BSI" target="_blank">ЕЦБ Data Portal</a> (набори BSI и MIR) ·
-  Генериран 27.07.2026 · Данни към 2026-06 ·
+  Генериран 28.07.2026 · Данни към 2026-06 ·
   <a href="https://github.com/tsvetoslavtsachev/bg-macro-dashboard" target="_blank">GitHub</a>
 </footer>
 
@@ -521,6 +573,82 @@ function showChart(key) {
   Plotly.react("main-chart", traces, layout, {displayModeBar: false, responsive: true});
   activeKey = key;
 }
+
+// ── Филмът на композита (мандат №45) ────────────────────────────────────────
+// FILM_DATA/WOW_DATA идват ГОТОВИ от Python — тук само се рисува.
+const FILM_DATA = {"dates": ["2005-12-01", "2006-03-01", "2006-06-01", "2006-09-01", "2006-12-01", "2007-03-01", "2007-06-01", "2007-09-01", "2007-12-01", "2008-03-01", "2008-06-01", "2008-09-01", "2008-12-01", "2009-03-01", "2009-06-01", "2009-09-01", "2009-12-01", "2010-03-01", "2010-06-01", "2010-09-01", "2010-12-01", "2011-03-01", "2011-06-01", "2011-09-01", "2011-12-01", "2012-03-01", "2012-06-01", "2012-09-01", "2012-12-01", "2013-03-01", "2013-06-01", "2013-09-01", "2013-12-01", "2014-03-01", "2014-06-01", "2014-09-01", "2014-12-01", "2015-03-01", "2015-06-01", "2015-09-01", "2015-12-01", "2016-03-01", "2016-06-01", "2016-09-01", "2016-12-01", "2017-03-01", "2017-06-01", "2017-09-01", "2017-12-01", "2018-03-01", "2018-06-01", "2018-09-01", "2018-12-01", "2019-03-01", "2019-06-01", "2019-09-01", "2019-12-01", "2020-03-01", "2020-06-01", "2020-09-01", "2020-12-01", "2021-03-01", "2021-06-01", "2021-09-01", "2021-12-01", "2022-03-01", "2022-06-01", "2022-09-01", "2022-12-01", "2023-03-01", "2023-06-01", "2023-09-01", "2023-12-01", "2024-03-01", "2024-06-01", "2024-09-01", "2024-12-01", "2025-03-01", "2025-06-01", "2025-09-01", "2025-12-01", "2026-03-01"], "values": [52.3, 43.1, 47.4, 52.6, 54.0, 56.9, 51.7, 45.4, 43.5, 38.7, 36.4, 35.0, 29.2, 27.7, 30.6, 30.1, 31.4, 39.0, 41.7, 43.3, 45.8, 43.4, 46.7, 49.3, 47.1, 47.6, 50.7, 48.3, 51.4, 47.9, 49.0, 48.3, 49.2, 52.6, 50.1, 51.3, 56.6, 53.7, 61.5, 63.4, 62.7, 58.6, 61.0, 62.0, 65.5, 68.7, 71.2, 74.8, 73.3, 73.6, 72.3, 66.6, 69.5, 72.9, 68.9, 68.3, 65.7, 57.7, 46.6, 48.4, 50.3, 64.1, 73.7, 70.1, 66.2, 54.8, 55.8, 51.1, 45.5, 37.9, 38.0, 40.7, 51.5, 56.8, 56.4, 62.0, 57.7, 52.1, 54.6, 51.1, 52.5, 54.2], "bands": [{"y0": 80.0, "y1": 100.0, "color": "#00c853"}, {"y0": 65.0, "y1": 80.0, "color": "#69f0ae"}, {"y0": 50.0, "y1": 65.0, "color": "#ffd600"}, {"y0": 35.0, "y1": 50.0, "color": "#ff6d00"}, {"y0": 0.0, "y1": 35.0, "color": "#d50000"}], "label": "Реконструирана история — днешните дефиниции и днешните данни върху тримесечна решетка от 2005Q4; не point-in-time запис.", "live": {"date": "2026-06-01", "value": 45.2}};
+const WOW_DATA = {"available": false, "empty_note": "Първи запис в живия журнал — делтата тръгва от следващия пуск."};
+
+(function() {
+  const el = document.getElementById("film-chart");
+  if (!el || !FILM_DATA.dates || !FILM_DATA.dates.length) return;
+
+  // Режимните ленти — праговете на композита като бледи хоризонтални полета
+  const shapes = (FILM_DATA.bands || []).map(b => ({
+    type: "rect", xref: "paper", yref: "y",
+    x0: 0, x1: 1, y0: b.y0, y1: b.y1,
+    fillcolor: b.color, opacity: 0.06, line: { width: 0 }, layer: "below"
+  }));
+
+  const traces = [{
+    x: FILM_DATA.dates,
+    y: FILM_DATA.values,
+    type: "scatter",
+    mode: "lines",
+    name: "композит",
+    line: { color: "#7c6af7", width: 2.5 },
+    hovertemplate: "%{x|%b %Y}: <b>%{y:.1f}</b><extra></extra>"
+  }];
+
+  if (FILM_DATA.live) {
+    traces.push({
+      x: [FILM_DATA.live.date],
+      y: [FILM_DATA.live.value],
+      type: "scatter",
+      mode: "markers",
+      name: "днес",
+      marker: { color: "#7c6af7", size: 11, line: { color: "#0f1117", width: 2 } },
+      hovertemplate: "%{x|%b %Y} (живо): <b>%{y:.1f}</b><extra></extra>"
+    });
+  }
+
+  const layout = {
+    paper_bgcolor: "rgba(0,0,0,0)",
+    plot_bgcolor: "rgba(0,0,0,0)",
+    font: { color: "#8892a4", family: "-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif" },
+    margin: { t: 10, r: 16, b: 40, l: 44 },
+    xaxis: { showgrid: false, zeroline: false, color: "#8892a4" },
+    yaxis: { range: [0, 100], gridcolor: "#1e2130", color: "#8892a4", dtick: 25 },
+    shapes: shapes,
+    hovermode: "x unified",
+    showlegend: false
+  };
+
+  Plotly.newPlot("film-chart", traces, layout, {displayModeBar: false, responsive: true});
+})();
+
+(function() {
+  const box = document.getElementById("wow-body");
+  if (!box) return;
+
+  if (!WOW_DATA.available) {
+    box.innerHTML = '<div class="wow-note">' + WOW_DATA.empty_note + '</div>';
+    return;
+  }
+
+  let h = '<div class="wow-since">' + WOW_DATA.since + '</div>';
+  h += '<div class="wow-head"><span class="label">Композит</span>' +
+       '<span class="val ' + WOW_DATA.composite_cls + '">' +
+       WOW_DATA.composite_delta_str + '</span></div>';
+  for (const r of WOW_DATA.rows) {
+    h += '<div class="wow-row"><span class="label">' + r.name + '</span>' +
+         '<span class="val ' + r.cls + '">' + r.delta_str + '</span></div>';
+  }
+  if (WOW_DATA.composition_changed) {
+    h += '<div class="wow-warn">' + WOW_DATA.composition_note + '</div>';
+  }
+  box.innerHTML = h;
+})();
 
 // Radar chart
 (function() {

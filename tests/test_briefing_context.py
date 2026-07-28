@@ -48,12 +48,13 @@ def test_context_stays_compact_like_the_china_model(context):
     Таванът СЛЕДВА броя лещи, компактността остава принципът. При 5 лещи беше
     12 000 (живият файл ~11 100). Мандат №43 добавя шеста лещова секция + двете
     ѝ бележки за качеството → живият файл е ~14 300, фикстурата ~14 200.
-    15 000 оставя ~5% запас: достатъчно да не пада от закръгление, достатъчно
-    тясно, за да ГРЪМНЕ при следващото сериозно раздуване — което е смисълът
-    на този тест (тревога, не бюджет).
+    Мандат №45 добавя секцията „Композитът през времето" (етикет + WoW блок +
+    годишната таблица ~22 реда) и разширената външна бележка → таванът се вдига
+    на 18 000. Духът е СЪЩИЯТ: тревога, не бюджет — числото е там, за да
+    ГРЪМНЕ при следващото сериозно раздуване, а не да се вдига по навик.
     """
     text, _, _ = context
-    assert len(text.encode("utf-8")) < 15_000
+    assert len(text.encode("utf-8")) < 18_000
 
 
 def test_context_carries_every_lens(context):
@@ -134,7 +135,7 @@ def test_notes_describe_the_new_lens_composition_not_single_series():
     """Едносерийната уговорка вече НЕ е вярна за кредит/външен."""
     joined = " ".join(DATA_QUALITY_NOTES)
     assert "не е едносериен" in joined
-    for token in ("lending", "yields", "current_account", "trade", "lending_cost"):
+    for token in ("lending", "yields", "external_balance", "lending_cost"):
         assert token in joined, token
 
 
@@ -256,6 +257,122 @@ def test_context_flags_a_stale_observation(tmp_path):
         regime=get_regime(composite), output_path=str(out), today=date(2026, 7, 24),
     )
     assert "⚠ 2020-01-01" in out.read_text(encoding="utf-8")
+
+
+# ── Мандат №45: композитът през времето ──────────────────────────────────────
+
+@pytest.fixture
+def context_with_history(tmp_path):
+    """Контекстът както го строи `run.py --export-context`: с история и WoW."""
+    from analysis.lens_history import build_history
+
+    idx = pd.date_range(end="2026-06-01", periods=300, freq="MS")
+    snapshot = {key: pd.Series([1.0, 3.0] * 150, index=idx) for key in SERIES_CATALOG}
+    reports = compute_lens_reports(SERIES_CATALOG, snapshot)
+    composite = compute_composite_score({l: r["score"] for l, r in reports.items()})
+    history = build_history(SERIES_CATALOG, snapshot, grid_start="2020-12-01")
+    wow = {
+        "date": "2026-07-28",
+        "prev_date": "2026-07-21",
+        "composite_delta": -1.4,
+        "lens_deltas": {"growth": 2.5, "inflation": -0.3, "labor": 0.0,
+                        "credit": -6.1, "external": 0.4, "property": 1.0},
+        "composition_changed": False,
+    }
+    out = tmp_path / "ctx.md"
+    generate_briefing_context(
+        snapshot=snapshot, lens_reports=reports, composite=composite,
+        regime=get_regime(composite), output_path=str(out), today=date(2026, 7, 28),
+        history=history, wow=wow,
+    )
+    return out.read_text(encoding="utf-8"), history
+
+
+def test_context_carries_the_history_section(context_with_history):
+    text, _ = context_with_history
+    assert "## Композитът през времето — реконструирана история [не PIT]" in text
+
+
+def test_context_history_section_carries_the_honesty_label(context_with_history):
+    """Скилът цитира числата с уговорката — затова тя пътува с тях."""
+    from analysis.lens_history import HONESTY_LABEL
+
+    text, _ = context_with_history
+    assert HONESTY_LABEL in text
+    assert "не point-in-time" in text
+
+
+def test_context_history_section_sits_after_the_lens_table(context_with_history):
+    text, _ = context_with_history
+    assert text.index("| Леща | Score | Състояние |") < text.index("## Композитът през времето")
+    assert text.index("## Композитът през времето") < text.index(f"## {LENS_NAMES_BG['growth']}")
+
+
+def test_context_reports_the_weekly_deltas_from_the_journal(context_with_history):
+    text, _ = context_with_history
+    assert "**Какво се смени (жив журнал):**" in text
+    assert "-1.4 спрямо 2026-07-21" in text
+    assert "-6.1" in text          # кредитът е най-голямото движение → в топ-3
+
+
+def test_context_ranks_the_lens_deltas_by_size(context_with_history):
+    """Топ-3 по |Δ|, не по азбучен ред — иначе най-важното пада най-долу."""
+    text, _ = context_with_history
+    block = text.split("**Какво се смени (жив журнал):**")[1].split("**Къде сме")[0]
+    lines = [l for l in block.splitlines() if l.startswith("- ")]
+    assert len(lines) == 4                      # композит + 3 лещи
+    assert LENS_NAMES_BG["credit"] in lines[1]  # |−6.1| е най-голямото
+    assert LENS_NAMES_BG["growth"] in lines[2]  # |+2.5| второто
+
+
+def test_context_says_so_when_the_journal_has_no_delta_yet(tmp_path):
+    from analysis.lens_history import build_history
+
+    idx = pd.date_range(end="2026-06-01", periods=300, freq="MS")
+    snapshot = {key: pd.Series([1.0, 3.0] * 150, index=idx) for key in SERIES_CATALOG}
+    reports = compute_lens_reports(SERIES_CATALOG, snapshot)
+    composite = compute_composite_score({l: r["score"] for l, r in reports.items()})
+    history = build_history(SERIES_CATALOG, snapshot, grid_start="2024-12-01")
+    out = tmp_path / "ctx.md"
+    generate_briefing_context(
+        snapshot=snapshot, lens_reports=reports, composite=composite,
+        regime=get_regime(composite), output_path=str(out), today=date(2026, 7, 28),
+        history=history, wow=None,
+    )
+    assert "Първи запис в живия журнал" in out.read_text(encoding="utf-8")
+
+
+def test_context_places_the_current_composite_against_the_reconstruction(context_with_history):
+    text, history = context_with_history
+    from analysis.lens_history import history_stats
+
+    stats = history_stats(history)
+    assert f"{stats['percentile']:.1f}% от {stats['n_quarters']} тримесечни точки" in text
+    assert f"Най-ниско: {stats['min_value']:.1f} на {stats['min_date']}" in text
+    assert f"Най-високо: {stats['max_value']:.1f} на {stats['max_date']}" in text
+
+
+def test_context_carries_the_yearly_table(context_with_history):
+    """Числата идват от решетката — нула ръчни константи."""
+    from analysis.lens_history import yearly_table
+
+    text, history = context_with_history
+    assert "| Година | Среден композит | Тримесечни точки |" in text
+    for row in yearly_table(history):
+        assert f"| {row['year']} | {row['mean_composite']:.1f} | {row['n']} |" in text
+
+
+def test_context_repeats_the_short_norm_caveat(context_with_history):
+    """Ранните редове стъпват на по-къси норми — уговорката пътува с таблицата."""
+    text, _ = context_with_history
+    assert "ПО-КЪСИ норми" in text
+    assert "ориентир, не калибрация" in text
+
+
+def test_context_without_history_stays_unchanged(context):
+    """Старият път (без история) не расте нова секция."""
+    text, _, _ = context
+    assert "## Композитът през времето" not in text
 
 
 def test_lens_rows_do_not_borrow_the_composite_regime_vocabulary(context):

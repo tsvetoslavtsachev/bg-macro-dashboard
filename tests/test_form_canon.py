@@ -330,6 +330,108 @@ def test_html_footer_names_the_ecb_portal(rendered):
     assert "ec.europa.eu/eurostat" in rendered
 
 
+# ── Мандат №45: филмът на композита + WoW блокът ─────────────────────────────
+
+@pytest.fixture
+def rendered_with_film(tmp_path):
+    """Лицето с история и WoW делта — както го строи `run.py --briefing`."""
+    from core.scorer import compute_composite_score, compute_lens_reports, get_regime
+    from analysis.lens_history import build_history
+
+    idx = pd.date_range(end="2026-06-01", periods=300, freq="MS")
+    snapshot = {key: pd.Series([1.0, 3.0] * 150, index=idx) for key in SERIES_CATALOG}
+    reports = compute_lens_reports(SERIES_CATALOG, snapshot)
+    composite = compute_composite_score({l: r["score"] for l, r in reports.items()})
+    history = build_history(SERIES_CATALOG, snapshot, grid_start="2023-12-01")
+    wow = {
+        "date": "2026-07-28",
+        "prev_date": "2026-07-21",
+        "composite_delta": -1.4,
+        "lens_deltas": {"growth": 2.5, "inflation": -0.3, "labor": 0.0,
+                        "credit": -6.1, "external": 0.4, "property": 1.0},
+        "composition_changed": False,
+    }
+    out = tmp_path / "index.html"
+    generate_html(snapshot, reports, composite, get_regime(composite), str(out),
+                  history=history, wow=wow)
+    return out.read_text(encoding="utf-8")
+
+
+def test_html_carries_the_film_card(rendered_with_film):
+    assert "Филмът: композитът през времето" in rendered_with_film
+    assert 'id="film-chart"' in rendered_with_film
+    assert "FILM_DATA" in rendered_with_film
+
+
+def test_html_film_carries_the_honesty_label(rendered_with_film):
+    """Етикетът пътува С графиката — не в друг документ, не в footer-а."""
+    from analysis.lens_history import HONESTY_LABEL
+
+    assert HONESTY_LABEL in rendered_with_film
+    assert "не point-in-time" in rendered_with_film
+
+
+def test_html_carries_the_wow_block(rendered_with_film):
+    assert "Какво се смени тази седмица" in rendered_with_film
+    assert "WOW_DATA" in rendered_with_film
+    assert "спрямо 21.07.2026" in rendered_with_film
+    assert "-6.1" in rendered_with_film
+
+
+def test_html_wow_block_says_so_when_the_journal_has_no_delta_yet(tmp_path):
+    """Първият пуск няма с какво да се сравни — лицето го КАЗВА, не мълчи."""
+    from core.scorer import compute_composite_score, compute_lens_reports, get_regime
+    from analysis.lens_history import build_history
+
+    idx = pd.date_range(end="2026-06-01", periods=300, freq="MS")
+    snapshot = {key: pd.Series([1.0, 3.0] * 150, index=idx) for key in SERIES_CATALOG}
+    reports = compute_lens_reports(SERIES_CATALOG, snapshot)
+    composite = compute_composite_score({l: r["score"] for l, r in reports.items()})
+    history = build_history(SERIES_CATALOG, snapshot, grid_start="2024-12-01")
+    out = tmp_path / "index.html"
+    generate_html(snapshot, reports, composite, get_regime(composite), str(out),
+                  history=history, wow=None)
+    html = out.read_text(encoding="utf-8")
+
+    assert "Какво се смени тази седмица" in html
+    assert "Първи запис в живия журнал" in html
+
+
+def test_html_wow_block_warns_when_the_composition_changed(tmp_path):
+    """Сменен състав между двата записа → делтата се обявява за нечиста."""
+    from core.scorer import compute_composite_score, compute_lens_reports, get_regime
+    from analysis.lens_history import build_history
+
+    idx = pd.date_range(end="2026-06-01", periods=300, freq="MS")
+    snapshot = {key: pd.Series([1.0, 3.0] * 150, index=idx) for key in SERIES_CATALOG}
+    reports = compute_lens_reports(SERIES_CATALOG, snapshot)
+    composite = compute_composite_score({l: r["score"] for l, r in reports.items()})
+    history = build_history(SERIES_CATALOG, snapshot, grid_start="2024-12-01")
+    wow = {
+        "date": "2026-07-28", "prev_date": "2026-07-21", "composite_delta": 0.2,
+        "lens_deltas": {"growth": 0.2}, "composition_changed": True,
+    }
+    out = tmp_path / "index.html"
+    generate_html(snapshot, reports, composite, get_regime(composite), str(out),
+                  history=history, wow=wow)
+    html = out.read_text(encoding="utf-8")
+
+    assert "съставът на уреда се смени между двата записа" in html
+    assert "делтата не е чиста" in html
+
+
+def test_html_film_explains_itself_in_the_methodology(rendered_with_film):
+    assert "Филмът на композита" in rendered_with_film
+    assert "реконструкция" in rendered_with_film
+    assert "score_journal.csv" in rendered_with_film
+
+
+def test_html_without_history_skips_the_film_card(rendered):
+    """Стар пуск без история не рисува празна рамка."""
+    assert "Филмът: композитът през времето" not in rendered
+    assert 'id="film-chart"' not in rendered
+
+
 def test_html_flags_a_stale_observation(tmp_path):
     """Наблюдение отпреди половин година при месечна серия → ⚠."""
     from core.scorer import compute_composite_score, compute_lens_reports, get_regime

@@ -89,10 +89,16 @@ def test_credit_lens_is_four_series_in_three_peer_groups():
     }
 
 
-def test_external_lens_is_two_series_in_two_peer_groups():
+def test_external_lens_is_two_series_in_one_peer_group():
+    """Мандат №45 П0: CA и GS са ЕДИН външен шок, не два.
+
+    Търговският баланс е подмножеството-двигател на дефицита по текущата сметка.
+    Отделни peer-групи го броят двойно и правят външната леща двойно по-уверена,
+    отколкото данните позволяват — прецедентът е `lending` (двата заема).
+    """
     external = {k: v for k, v in SERIES_CATALOG.items() if "external" in v["lens"]}
     assert set(external) == {"BG_CA_GDP", "BG_TRADE_GS"}
-    assert {v["peer_group"] for v in external.values()} == {"current_account", "trade"}
+    assert {v["peer_group"] for v in external.values()} == {"external_balance"}
 
 
 # ── Мандат №42: цената на кредита ────────────────────────────────────────────

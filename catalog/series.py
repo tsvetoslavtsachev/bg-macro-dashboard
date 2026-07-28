@@ -165,8 +165,16 @@ SERIES_CATALOG: dict[str, dict[str, Any]] = {
     },
     
     # ════════════════════════════════════════════════════════
-    # EXTERNAL
+    # EXTERNAL — външният сектор (мандат №45 П0)
     # ════════════════════════════════════════════════════════
+    # Двете серии живеят в ЕДНА peer-група `external_balance`, по прецедента на
+    # `lending`: търговският баланс на стоки и услуги е ПОДМНОЖЕСТВОТО-ДВИГАТЕЛ
+    # на дефицита по текущата сметка — един и същ външен шок. Отделни peer-групи
+    # биха го броили ДВА пъти и биха направили външната леща двойно по-уверена,
+    # отколкото данните позволяват. Външният сектор = 1 peer сигнал, докато не
+    # дойде ортогонална серия (туризъм/услуги — отделен скаут, не тук).
+    # Математически: при peer-тегла 1.0 средното на две групи по 1 серия ≡ една
+    # група от 2 серии → композитът и външният z НЕ се менят при сливането.
     "BG_CA_GDP": {
         "source": "eurostat",
         "id": "bop_gdp6_q?geo=BG&bop_item=CA&stk_flow=BAL&partner=WRL_REST",
@@ -174,7 +182,7 @@ SERIES_CATALOG: dict[str, dict[str, Any]] = {
         "name_bg": "Текуща сметка (% от БВП, 4-тримесечна плъзгаща)",
         "name_en": "Current Account to GDP",
         "lens": ["external"],
-        "peer_group": "current_account",
+        "peer_group": "external_balance",
         "tags": [],
         "transform": "roll4q_mean",
         "is_rate": True,
@@ -191,7 +199,7 @@ SERIES_CATALOG: dict[str, dict[str, Any]] = {
         "name_bg": "Търговски баланс — стоки и услуги (% от БВП, 4-тримесечна плъзгаща)",
         "name_en": "Trade Balance, Goods and Services to GDP",
         "lens": ["external"],
-        "peer_group": "trade",
+        "peer_group": "external_balance",
         "tags": [],
         "transform": "roll4q_mean",
         "is_rate": True,
