@@ -125,7 +125,43 @@ SERIES_CATALOG: dict[str, dict[str, Any]] = {
         "revision_prone": False,
         "narrative_hint": "Показва устойчивия инфлационен натиск.",
     },
-    
+    # ── Усещаната инфлация — КОНТЕКСТНА серия (мандат №48) ────────────────────
+    # ЕК потребителска анкета (Eurostat `ei_bsco_m`, indic `BS-PT-LY`): как
+    # потребителите ОЦЕНЯВАТ ценовите тенденции през последните 12 месеца.
+    # Числото е качествен БАЛАНС (дял „поскъпнаха силно/умерено" минус дял
+    # „не се промениха/поевтиняха"), НЕ процент — 75 не значи 75% инфлация.
+    # Затова серията:
+    #   · няма леща (`lens: []`) и няма да получи score — `context_only: True`;
+    #   · НЕ влиза в композита ПО КОНСТРУКЦИЯ, а не по изключение в скорера;
+    #   · стои ДО официалната HICP на лицето, защото самата РАЗЛИКА между двете
+    #     е находката: възприятието стои на нивата от инфлационната криза
+    #     2021-23, докато официалната инфлация е кратно по-ниска.
+    # Живо проверено 28.07.2026: n=302, пълна месечна история 2001-05 → 2026-06,
+    # s_adj=SA, unit=BAL (единствената налична мерна единица за този набор).
+    # Съседът `BS-PT-NY` (очакванията за СЛЕДВАЩИТЕ 12 месеца, също n=302,
+    # последно 21.9 — закотвени) е меню-кандидат, НЕ влиза с този мандат.
+    "BG_INFL_PERCEIVED": {
+        "source": "eurostat",
+        "id": "ei_bsco_m?geo=BG&indic=BS-PT-LY&s_adj=SA&unit=BAL",
+        "region": "BG",
+        "name_bg": "Усещана инфлация (ЕК анкета, баланс)",
+        "name_en": "Perceived Inflation (EC survey, balance)",
+        "lens": [],
+        "context_only": True,
+        "peer_group": "context",
+        "tags": ["survey", "context"],
+        "transform": "level",
+        "is_rate": False,
+        "historical_start": "2001-05-01",
+        "release_schedule": "monthly",
+        "typical_release": "end_month",
+        "revision_prone": False,
+        "narrative_hint": "Качественият баланс на потребителските възприятия за "
+                          "цените през последните 12 месеца — не е процент; "
+                          "гравитира далеч над официалната ХИПЦ и показва как се "
+                          "ЧУВСТВА инфлацията.",
+    },
+
     # ════════════════════════════════════════════════════════
     # LABOR
     # ════════════════════════════════════════════════════════
@@ -393,17 +429,32 @@ def series_by_source(source: str) -> list[dict[str, Any]]:
             result.append(item)
     return result
 
-def validate_catalog() -> list[str]:
-    """Валидира каталога за грешки."""
+def validate_catalog(catalog: dict[str, dict[str, Any]] | None = None) -> list[str]:
+    """Валидира каталога за грешки.
+
+    Празна леща е ГРЕШКА — иначе серия, на която някой е забравил лещата, тихо
+    изпада от композита и никой не разбира. Единственото изключение е изричният
+    флаг `context_only: True` (мандат №48): контекстната серия е наблюдение ДО
+    композита по СЪЗНАТЕЛНО решение, а флагът е декларацията на това решение.
+    """
+    catalog = SERIES_CATALOG if catalog is None else catalog
     errors = []
-    for k, v in SERIES_CATALOG.items():
+    for k, v in catalog.items():
         if v.get("source") not in ALLOWED_SOURCES:
             errors.append(f"{k}: invalid source {v.get('source')}")
         if v.get("region") not in ALLOWED_REGIONS:
             errors.append(f"{k}: invalid region {v.get('region')}")
-        for l in v.get("lens", []):
+        lenses = v.get("lens", [])
+        if not lenses and not v.get("context_only"):
+            errors.append(
+                f"{k}: empty lens without context_only "
+                f"(серия без леща изпада от композита мълчаливо)"
+            )
+        for l in lenses:
             if l not in ALLOWED_LENSES:
                 errors.append(f"{k}: invalid lens {l}")
+        if v.get("context_only") and lenses:
+            errors.append(f"{k}: context_only series must not carry a lens")
         if v.get("transform") not in ALLOWED_TRANSFORMS:
             errors.append(f"{k}: invalid transform {v.get('transform')}")
     return errors

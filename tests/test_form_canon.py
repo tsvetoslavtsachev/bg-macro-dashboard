@@ -330,6 +330,66 @@ def test_html_footer_names_the_ecb_portal(rendered):
     assert "ec.europa.eu/eurostat" in rendered
 
 
+# ── Мандат №48: котвената лента + контекстната серия ─────────────────────────
+
+def test_html_carries_the_anchor_strip_with_both_official_measures(rendered):
+    """Вторият глас стои на лицето — с числото, зоната и цветната точка."""
+    assert "Инфлацията с котви" in rendered
+    assert 'class="anchor-card"' in rendered
+    assert rendered.count('class="anchor-row"') == 2      # обща + базисна
+    assert "пп над целта (2%)" in rendered or "пп под целта (2%)" in rendered
+    for spec_key in ("BG_HICP", "BG_HICP_CORE"):
+        assert SERIES_CATALOG[spec_key]["name_bg"] in rendered
+
+
+def test_html_anchor_dots_use_the_zone_palette(rendered):
+    from config import INFLATION_ANCHOR_COLORS
+
+    used = [c for c in INFLATION_ANCHOR_COLORS.values()
+            if f'class="anchor-dot" style="background:{c}"' in rendered]
+    assert used, "поне една зона трябва да е оцветена от палитрата в config"
+
+
+def test_html_anchor_strip_sits_right_under_the_module_bars(rendered):
+    """Котвите се четат ДО компонентите на композита, не в друг край на страницата."""
+    card = rendered.index('class="anchor-card"')
+    assert rendered.index("Компоненти на резултата") < card
+    assert card < rendered.index("Последни стойности")
+
+
+def test_html_anchor_strip_says_the_composite_is_untouched(rendered):
+    """Без това изречение читателят би помислил, че зоните местят числото."""
+    from core.display import ANCHOR_DISCLAIMER
+
+    assert ANCHOR_DISCLAIMER in rendered
+    assert 'class="anchor-note"' in rendered
+
+
+def test_html_marks_the_context_series_with_a_grey_badge_and_no_score(rendered):
+    """Контекстната серия е наблюдение ДО композита — лицето го КАЗВА."""
+    from config import (
+        CONTEXT_BADGE_BG,
+        CONTEXT_BADGE_COLORS,
+        CONTEXT_LINE_COLOR,
+        CONTEXT_SCORE_NOTE,
+    )
+
+    bg, fg = CONTEXT_BADGE_COLORS
+    assert f".lens-context {{ background:{bg}; color:{fg}; }}" in rendered
+    assert f'<span class="lens-badge lens-context">{CONTEXT_BADGE_BG}</span>' in rendered
+    assert f'class="ctx-score" title="{CONTEXT_SCORE_NOTE}">—</td>' in rendered
+    # Сивото стига и до графиката — контекстът не се рисува като „растеж"
+    assert f'"context": "{CONTEXT_LINE_COLOR}"' in rendered
+
+
+def test_html_methodology_explains_the_two_voices(rendered):
+    assert "<h4>Инфлацията: двата гласа</h4>" in rendered
+    assert "<h4>Усещаната инфлация — контекст, не компонент</h4>" in rendered
+    for token in ("процентни пункта", "≤1 пп", "1–2 пп", "НЕ са калибрирани",
+                  "баланс", "не влиза в композита"):
+        assert token in rendered, token
+
+
 # ── Мандат №45: филмът на композита + WoW блокът ─────────────────────────────
 
 @pytest.fixture
