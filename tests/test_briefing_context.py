@@ -50,11 +50,13 @@ def test_context_stays_compact_like_the_china_model(context):
     ѝ бележки за качеството → живият файл е ~14 300, фикстурата ~14 200.
     Мандат №45 добавя секцията „Композитът през времето" (етикет + WoW блок +
     годишната таблица ~22 реда) и разширената външна бележка → таванът се вдига
-    на 18 000. Духът е СЪЩИЯТ: тревога, не бюджет — числото е там, за да
-    ГРЪМНЕ при следващото сериозно раздуване, а не да се вдига по навик.
+    на 18 000. Мандат №47 добавя температурната секция (зоните + provenance) и
+    пренаписаните бум-бележки → 22 000. Духът е СЪЩИЯТ: тревога, не бюджет —
+    числото е там, за да ГРЪМНЕ при следващото сериозно раздуване, а не да се
+    вдига по навик.
     """
     text, _, _ = context
-    assert len(text.encode("utf-8")) < 18_000
+    assert len(text.encode("utf-8")) < 22_000
 
 
 def test_context_carries_every_lens(context):
@@ -189,12 +191,35 @@ def test_notes_warn_that_the_composite_was_rebalanced():
     assert "не го сравнявай механично" in joined
 
 
-def test_notes_flag_the_boom_polarity_as_under_review():
-    """Бум в цените и разрешителните е здраве днес и риск утре — уредът го брои
-    като сила, затова уговорката пътува с числото."""
+# ── Мандат №47: бум-полярностите са РЕШЕНИ ───────────────────────────────────
+
+def test_notes_declare_the_boom_polarities_resolved_not_pending():
+    """Уговорката „ПОД ПРЕГЛЕД / Фаза 3" беше вярна до №47; след него е неистина.
+
+    Скилът чете ТЕЗИ бележки — ако те още говорят за отложено решение, анализът
+    ще обяснява числото с логика, която уредът вече не ползва.
+    """
     joined = " ".join(DATA_QUALITY_NOTES)
-    assert "ПОД ПРЕГЛЕД" in joined
-    assert "Фаза 3" in joined
+    assert "ПОД ПРЕГЛЕД" not in joined
+    assert "Фаза 3" not in joined
+    assert joined.count("мандат №47") >= 3
+    assert "ОПТИМАЛНА ЗОНА" in joined
+
+
+def test_notes_carry_the_zone_numbers_and_their_anchors():
+    """Праговете пътуват с провенанса си, не като голи числа."""
+    joined = " ".join(DATA_QUALITY_NOTES)
+    for token in ("0–13%", "0–12%", "0–10%", "номиналния БВП ръст",
+                  "доходен ръст", "конвергентния таван"):
+        assert token in joined, token
+
+
+def test_notes_explain_the_new_permits_transform():
+    """Числото на разрешителните вече е ДРУГО — таблицата чете плъзгащата."""
+    joined = " ".join(DATA_QUALITY_NOTES)
+    assert "yoy_roll4" in joined
+    assert "4-тримесечна плъзгаща" in joined
+    assert "Строителната продукция ОСТАВА +1" in joined
 
 
 def test_short_window_series_get_a_note_in_the_export(tmp_path):
@@ -373,6 +398,85 @@ def test_context_without_history_stays_unchanged(context):
     """Старият път (без история) не расте нова секция."""
     text, _, _ = context
     assert "## Композитът през времето" not in text
+
+
+# ── Мандат №47: температурният слой в експорта ───────────────────────────────
+
+@pytest.fixture
+def context_with_temperature(tmp_path):
+    """Контекстът както го строи `--export-context`: с температурата вътре."""
+    from analysis.temperature import temperature
+
+    idx = pd.date_range(end="2026-06-01", periods=300, freq="MS")
+    snapshot = {key: pd.Series([1.0, 3.0] * 150, index=idx) for key in SERIES_CATALOG}
+    snapshot["BG_HPI"] = pd.Series([14.8] * 300, index=idx)        # готов г/г темп
+    snapshot["BG_LOANS_HH"] = pd.Series(
+        [100.0 * (1.21 ** (i / 12.0)) for i in range(300)], index=idx
+    )
+    reports = compute_lens_reports(SERIES_CATALOG, snapshot)
+    composite = compute_composite_score({l: r["score"] for l, r in reports.items()})
+    temp = temperature(SERIES_CATALOG, snapshot)
+    out = tmp_path / "ctx.md"
+    generate_briefing_context(
+        snapshot=snapshot, lens_reports=reports, composite=composite,
+        regime=get_regime(composite), output_path=str(out), today=date(2026, 7, 28),
+        temp=temp,
+    )
+    return out.read_text(encoding="utf-8"), temp
+
+
+def test_context_carries_the_temperature_section(context_with_temperature):
+    text, temp = context_with_temperature
+    assert (f"## Температурният слой: {temp['n_hot']}/{temp['n_total']} "
+            f"бум-серии над зоната си") in text
+    assert temp["n_hot"] == 2
+
+
+def test_context_names_which_series_burn_with_value_and_threshold(context_with_temperature):
+    text, temp = context_with_temperature
+    for e in temp["hot"]:
+        assert f"{e['name_bg']}: **{e['value']:.1f}** при праг {e['hi']:.0f}" in text
+
+
+def test_context_prints_the_zone_table_with_provenance(context_with_temperature):
+    """Зоните идват от POLARITY — нула ръчни константи в експорта."""
+    from analysis.temperature import zone_table
+    from catalog.polarity import OPT_SOURCE_NOTE
+
+    text, _ = context_with_temperature
+    for z in zone_table(SERIES_CATALOG):
+        assert (f"| {z['name_bg']} | {z['lo']:.0f} … {z['hi']:.0f}% | "
+                f"{z['s']:.0f} пп | {z['provenance']} |") in text
+    assert OPT_SOURCE_NOTE in text
+
+
+def test_context_explains_how_to_read_a_score_under_an_optimal_zone(context_with_temperature):
+    """„50 = нормално" е капан при OPT: платото е ЗДРАВЕ, не неутралност."""
+    from export.briefing_context import _zone_score
+
+    text, _ = context_with_temperature
+    assert f"**{_zone_score():.1f}**, не на 50" in text
+    assert _zone_score() > 50.0
+
+
+def test_context_says_the_thermometer_counts_only_the_upper_breach(context_with_temperature):
+    text, _ = context_with_temperature
+    assert "САМО нарушенията НАГОРЕ" in text
+    assert "look-ahead" in text
+
+
+def test_context_declares_the_composition_change_under_the_composite(context_with_temperature):
+    """Композитът пада без нито едно ново данно — това се КАЗВА, не се крие."""
+    text, _ = context_with_temperature
+    assert "Съставът е сменен с мандат №47" in text
+    assert "не се сравнява механично с четенията отпреди" in text
+    assert text.index("Съставът е сменен") < text.index("## Температурният слой")
+
+
+def test_context_without_a_temperature_skips_the_section(context):
+    """Старият път (без термометър) не расте празна секция."""
+    text, _, _ = context
+    assert "## Температурният слой" not in text
 
 
 def test_lens_rows_do_not_borrow_the_composite_regime_vocabulary(context):

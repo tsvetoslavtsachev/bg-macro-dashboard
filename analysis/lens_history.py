@@ -31,7 +31,13 @@ analysis/lens_history.py
 Нула нова математика: историята минава през СЪЩИЯ `compute_lens_reports` →
 `compute_composite_score`, по който върви и живото `--status`. Затова рязането
 при `t_live` е no-op и последният ред е ТЪЖДЕСТВЕН на живото изчисление —
-това е гейт-тестът на модула.
+това е гейт-тестът на модула. От мандат №47 гейтът включва и `temp_count`.
+
+⚠ Мандат №47: всеки ред носи и ТЕМПЕРАТУРА (`temp_count` + `temp_hot`) —
+колко бум-серии стоят над абсолютната си зона на този марк. Праговете са
+абсолютни, затова колоната е смятаема назад БЕЗ look-ahead и точно тя носи
+приемния гейт (2006H2-2008 свети · 2015-2019 мълчи). Виж
+`analysis/temperature.py`.
 """
 from __future__ import annotations
 
@@ -44,6 +50,7 @@ from typing import Any, Optional
 import pandas as pd
 
 from config import DATA_DIR, MODULE_WEIGHTS
+from analysis.temperature import hot_keys_str, temperature
 from catalog.polarity import polarity_for
 from catalog.series import SERIES_CATALOG
 from core.scorer import (
@@ -89,13 +96,18 @@ def _lens_order() -> list[str]:
 
 
 def history_columns() -> list[str]:
-    """Колоните на решетката (без индекса `date`)."""
+    """Колоните на решетката (без индекса `date`).
+
+    `temp_count` / `temp_hot` са температурният слой (мандат №47): колко
+    бум-серии стоят над зоната си на този марк и кои точно. Праговете са
+    АБСОЛЮТНИ, затова колоната е смятаема и назад — нула look-ahead.
+    """
     lenses = _lens_order()
     return (
         ["composite"]
         + [f"z_{lens}" for lens in lenses]
         + [f"score_{lens}" for lens in lenses]
-        + ["n_series", "n_lenses", "row_type"]
+        + ["n_series", "n_lenses", "temp_count", "temp_hot", "row_type"]
     )
 
 
@@ -106,7 +118,7 @@ def journal_columns() -> list[str]:
         ["date", "composite"]
         + [f"score_{lens}" for lens in lenses]
         + [f"z_{lens}" for lens in lenses]
-        + ["n_series", "n_lenses", "composition"]
+        + ["n_series", "n_lenses", "temp_count", "composition"]
     )
 
 
@@ -185,8 +197,12 @@ def build_grid(
 
 
 def _row_from_reports(lens_reports: dict, composite: Optional[float],
-                      row_type: str) -> dict[str, Any]:
-    """Лещовите доклади → един ред на решетката/журнала."""
+                      row_type: str, temp: Optional[dict] = None) -> dict[str, Any]:
+    """Лещовите доклади (+ температурата) → един ред на решетката/журнала.
+
+    `temp=None` значи „не е мерено", не „нула горещи" — редът носи празна
+    стойност вместо фалшива студенина.
+    """
     row: dict[str, Any] = {"composite": composite}
     for lens in _lens_order():
         rep = lens_reports.get(lens, {})
@@ -200,6 +216,8 @@ def _row_from_reports(lens_reports: dict, composite: Optional[float],
     row["n_lenses"] = int(sum(
         1 for rep in lens_reports.values() if rep.get("score") is not None
     ))
+    row["temp_count"] = None if temp is None else int(temp.get("n_hot", 0))
+    row["temp_hot"] = hot_keys_str(temp)
     row["row_type"] = row_type
     return row
 
@@ -232,7 +250,11 @@ def build_history(
         composite = compute_composite_score(
             {lens: rep["score"] for lens, rep in reports.items()}
         )
-        records.append(_row_from_reports(reports, composite, row_type))
+        # Температурата се мери върху СЪЩИЯ рязан snapshot — абсолютните прагове
+        # нямат look-ahead, затова колоната е честна и на марк от 2007.
+        records.append(_row_from_reports(
+            reports, composite, row_type, temp=temperature(catalog, cut)
+        ))
         index.append(t)
 
     df = pd.DataFrame(records, index=pd.DatetimeIndex(index, name="date"))
@@ -253,6 +275,10 @@ def _normalize_history(df: pd.DataFrame) -> pd.DataFrame:
         df[col] = pd.to_numeric(df[col], errors="coerce").astype("float64")
     for col in ("n_series", "n_lenses"):
         df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0).astype("int64")
+    # Нулевата температура е ЛЕГИТИМЕН отговор (2015-19 мълчи 0/20), затова
+    # колоната е nullable: празно = „не е мерено", 0 = „мерено, никой не гори".
+    df["temp_count"] = pd.to_numeric(df["temp_count"], errors="coerce").astype("Int64")
+    df["temp_hot"] = df["temp_hot"].fillna("").astype("object")
     df["row_type"] = df["row_type"].astype("object")
     df.index = pd.DatetimeIndex(df.index, name="date")
     return df
@@ -290,6 +316,8 @@ def _normalize_journal(df: pd.DataFrame) -> pd.DataFrame:
         df[col] = pd.to_numeric(df[col], errors="coerce").astype("float64")
     for col in ("n_series", "n_lenses"):
         df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0).astype("int64")
+    # Старите редове (отпреди №47) нямат температура — остават ПРАЗНИ, не 0.
+    df["temp_count"] = pd.to_numeric(df["temp_count"], errors="coerce").astype("Int64")
     df["date"] = df["date"].astype(str)
     df["composition"] = df["composition"].astype(str)
     return df.sort_values("date", kind="stable").reset_index(drop=True)
@@ -310,15 +338,21 @@ def append_journal(
     today: Optional[date] = None,
     path: Path | str = JOURNAL_PATH,
     catalog: Optional[dict] = None,
+    temp: Optional[dict] = None,
 ) -> pd.DataFrame:
     """Записва ЕДИН ред за днес в живия журнал. Идемпотентен по дата.
 
     Втори пуск в същия ден ЗАМЕНЯ реда, не добавя втори — иначе WoW делтата би
     сравнявала днес с днес и би показвала нула при всяко повторение.
+
+    `temp` е изходът на `analysis.temperature.temperature()`; без него редът
+    носи празна температура (честно „не е мерено"), не фалшива нула. Тагът
+    `composition` се сменя САМ с новите полярности — очаквано по дизайн.
     """
     today = date.today() if today is None else today
-    row = _row_from_reports(lens_reports, composite, ROW_LIVE)
+    row = _row_from_reports(lens_reports, composite, ROW_LIVE, temp=temp)
     row.pop("row_type")
+    row.pop("temp_hot", None)     # кой гори живее в решетката, не в журнала
     row["date"] = today.isoformat()
     row["composition"] = composition_tag(catalog)
 

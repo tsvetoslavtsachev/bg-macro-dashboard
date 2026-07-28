@@ -72,6 +72,17 @@ def compute_roll4q_mean(series: pd.Series) -> pd.Series:
     """
     return series.rolling(4).mean()
 
+def compute_yoy_roll4(series: pd.Series) -> pd.Series:
+    """4-периодна плъзгаща средна НА годишния темп (мандат №47 §А2).
+
+    За серии, чието сурово г/г е твърде шумно, за да носи АБСОЛЮТЕН праг:
+    разрешителните за строеж скачат ±60% на тримесечие и всяка зона се дави в
+    шума (2015-19 max на суровото г/г = 61.1 срещу 38.7 на плъзгащата). Редът е
+    важен: първо темпът, после изглаждането — обратното („темп на плъзгащата")
+    би смесило две различни трансформации.
+    """
+    return compute_yoy_pct(series).rolling(4).mean()
+
 def compute_z_score(series: pd.Series, window: int = None) -> pd.Series:
     """Изчислява Z-score (ролиращ или върху цялата серия)."""
     if window:
@@ -100,6 +111,8 @@ def apply_transform(series: pd.Series, transform: str) -> pd.Series:
         return compute_qoq_pct(series)
     elif transform == "roll4q_mean":
         return compute_roll4q_mean(series)
+    elif transform == "yoy_roll4":
+        return compute_yoy_roll4(series)
     elif transform == "z_score":
         return compute_z_score(series)
     elif transform == "first_diff":

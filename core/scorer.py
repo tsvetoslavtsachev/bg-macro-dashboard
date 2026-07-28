@@ -11,7 +11,8 @@ core/scorer.py
   1. каталожна трансформация  → темп вместо ниво за номиналните серии
   2. робастен z спрямо ПЛЪЗГАЩ 10-г. прозорец:
          z = (x − median₁₀) / (1.4826 · MAD₁₀)
-  3. полярност → health-z (по-високо = по-здраво; U-форма около целта за инфлацията)
+  3. полярност → health-z (по-високо = по-здраво; U-форма около целта за
+     инфлацията; АБСОЛЮТНА оптимална зона за бум-сериите — мандат №47)
   4. score = 50 · (1 + tanh(z_h / 2))   → 50 = близката норма; ±2σ ≈ 88/12
   5. серия → peer-група (средно) → леща (претеглено) → композит (MODULE_WEIGHTS,
      с ренормализация: празна леща ИЗПАДА, не се брои като „неутрално 50")
@@ -32,7 +33,14 @@ import numpy as np
 import pandas as pd
 
 from config import MACRO_REGIMES, MODULE_WEIGHTS, HISTORY_START
-from catalog.polarity import polarity_for, peer_group_weight, U_BAND, is_u_shaped
+from catalog.polarity import (
+    polarity_for,
+    peer_group_weight,
+    U_BAND,
+    is_opt,
+    is_u_shaped,
+    opt_zone,
+)
 from core.primitives import (
     MIN_OBS,
     WINDOW_YEARS,
@@ -43,7 +51,9 @@ from core.primitives import (
 # ── константи на фамилията (синхронни с EU core/scorer.py) ───────────────────
 TANH_SLOPE = 2.0        # score = 50·(1+tanh(z_h/SLOPE)); ±2σ ≈ 88/12
 CLIP_SIGMA = 6.0        # клип при scale_fallback (пълна история вместо 10г)
-PCT_TRANSFORMS = {"yoy_pct", "mom_pct", "qoq_pct"}
+# Трансформации, чийто ИЗХОД е процент (дисплей „12.34 %"). `yoy_roll4` е
+# плъзгаща средна НА процент — също процент (мандат №47 §А2).
+PCT_TRANSFORMS = {"yoy_pct", "mom_pct", "qoq_pct", "yoy_roll4"}
 
 # ── Честният къс прозорец (мандат №39 §А3) ───────────────────────────────────
 # Ако реалният обхват на данните в прозореца покрива по-малко от този дял от
@@ -69,6 +79,21 @@ def percentile_rank(current: float, history: pd.Series) -> float:
 
 def _health_z(val: float, med: float, scale: float, polarity: Any) -> float:
     """Робастен z → health-z (по-високо = по-здраво)."""
+    # ── Оптимална зона (мандат №47) — ПРЕДИ линейния клон ────────────────────
+    # Плато на здравето в [lo, hi] (както U-формата в центъра си), после спад
+    # по 1σ на всеки `s` пункта. АБСОЛЮТНО: `med` и `scale` от 10-годишната
+    # норма НЕ участват — точно това е смисълът на котвите. В бум прозорец
+    # нормата сама се вдига и робастният z аплодира прегряването; абсолютният
+    # праг не мърда и затова важи и назад във времето (нула look-ahead).
+    if is_opt(polarity):
+        lo, hi, width = opt_zone(polarity)
+        if width <= 0 or np.isnan(width):
+            return float(U_BAND)
+        if val > hi:
+            return float(U_BAND - (val - hi) / width)
+        if val < lo:
+            return float(U_BAND - (lo - val) / width)
+        return float(U_BAND)
     if is_u_shaped(polarity):
         if scale == 0 or np.isnan(scale):
             return float(U_BAND)
@@ -111,8 +136,17 @@ def _window_label(win: pd.Series, window_years: int, wide_label: str) -> tuple[s
     return f"къс прозорец (от {start})", True
 
 
+def _num_repr(x: float) -> str:
+    """`12.0` → „12", `12.5` → „12.5" — четимият вид на праг в етикет."""
+    f = float(x)
+    return str(int(f)) if f.is_integer() else str(f)
+
+
 def _polarity_repr(polarity: Any) -> str:
     """Стрингов repr (избягва tuple в JSON/HTML)."""
+    if is_opt(polarity):
+        lo, hi, width = opt_zone(polarity)
+        return f"OPT[{_num_repr(lo)}..{_num_repr(hi)}]/{_num_repr(width)}"
     if is_u_shaped(polarity):
         return f"U:{polarity[1]}" + (f"={polarity[2]}" if polarity[1] == "target" else "")
     return f"{polarity:+d}" if polarity in (1, -1, +1) else str(polarity)

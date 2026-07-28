@@ -187,12 +187,26 @@ def test_hpi_is_already_a_year_on_year_rate_so_it_stays_a_level():
 
 def test_construction_and_permits_are_indices_read_as_growth_rates():
     """И двете са индекси 2021=100 → нивото не е сравнимо във времето; четат се
-    като г/г, точно като промишленото производство."""
+    като г/г. Разрешителните — през 4-тримесечната плъзгаща (мандат №47)."""
     for key in ("BG_CONSTR", "BG_PERMITS"):
         spec = SERIES_CATALOG[key]
-        assert spec["transform"] == "yoy_pct", key
+        assert spec["transform"] in ("yoy_pct", "yoy_roll4"), key
         assert spec["is_rate"] is False, key
         assert "unit=I21" in spec["id"], key
+    assert SERIES_CATALOG["BG_CONSTR"]["transform"] == "yoy_pct"
+
+
+def test_permits_are_read_as_a_four_quarter_rolling_growth_rate():
+    """Мандат №47 §А2: суровото г/г е негодно за АБСОЛЮТЕН праг — в спокойните
+    2015-19 то стига 61.1% (p90 47.7) и шумът гаси всяка зона. Плъзгащата
+    сепарира епохите чисто (2015-19 max 38.7 срещу 2005-08 med 39.8)."""
+    spec = SERIES_CATALOG["BG_PERMITS"]
+    assert spec["transform"] == "yoy_roll4"
+    assert "4-тримесечна плъзгаща" in spec["name_bg"]
+
+    from catalog.series import ALLOWED_TRANSFORMS
+
+    assert "yoy_roll4" in ALLOWED_TRANSFORMS
 
 
 def test_permits_use_the_square_metre_indicator_that_actually_exists():

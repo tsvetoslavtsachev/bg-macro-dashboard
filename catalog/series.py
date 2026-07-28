@@ -11,7 +11,8 @@ from typing import Any
 ALLOWED_SOURCES = {"eurostat", "ecb", "nsi", "bnb", "derived"}
 ALLOWED_REGIONS = {"BG", "EU"}
 ALLOWED_LENSES = {"labor", "inflation", "growth", "credit", "external", "property"}
-ALLOWED_TRANSFORMS = {"level", "yoy_pct", "mom_pct", "qoq_pct", "z_score", "first_diff", "roll4q_mean"}
+ALLOWED_TRANSFORMS = {"level", "yoy_pct", "mom_pct", "qoq_pct", "z_score",
+                      "first_diff", "roll4q_mean", "yoy_roll4"}
 ALLOWED_SCORING_MODES = {"level", "momentum"}
 ALLOWED_SCHEDULES = {"daily", "weekly", "monthly", "quarterly", "annually"}
 
@@ -323,8 +324,9 @@ SERIES_CATALOG: dict[str, dict[str, Any]] = {
     #   `pipeline` — колко влиза в тръбата (разрешителните, водещият индикатор)
     # Живо проверени Eurostat заявки (26.07.2026 — не се преоткриват):
     # `prc_hpi_q` носи готов г/г темп (unit `RCH_A`) → transform `level`;
-    # другите две са ИНДЕКСИ (2021=100) → `yoy_pct`. Внимание при разрешителните:
-    # dimension кодът `PSQM` НЕ съществува — верният е `BPRM_SQM`.
+    # другите две са ИНДЕКСИ (2021=100) → г/г. Внимание при разрешителните:
+    # dimension кодът `PSQM` НЕ съществува — верният е `BPRM_SQM`; и от мандат
+    # №47 темпът им се чете като 4-тримесечна плъзгаща (`yoy_roll4`).
     "BG_HPI": {
         "source": "eurostat",
         "id": "prc_hpi_q?geo=BG&purchase=TOTAL&unit=RCH_A",
@@ -366,12 +368,17 @@ SERIES_CATALOG: dict[str, dict[str, Any]] = {
         "source": "eurostat",
         "id": "sts_cobp_q?geo=BG&indic_bt=BPRM_SQM&cpa2_1=CPA_F41001&s_adj=SCA&unit=I21",
         "region": "BG",
-        "name_bg": "Разрешителни за строеж — жилищни, м² (г/г)",
-        "name_en": "Building Permits, Residential Floor Area (YoY)",
+        "name_bg": "Разрешителни за строеж — жилищни, м² (г/г, 4-тримесечна плъзгаща)",
+        "name_en": "Building Permits, Residential Floor Area (YoY, 4Q rolling)",
         "lens": ["property"],
         "peer_group": "pipeline",
         "tags": ["leading"],
-        "transform": "yoy_pct",
+        # Мандат №47 §А2: СУРОВОТО г/г е негодно за абсолютна котва — в
+        # спокойната епоха 2015-19 то стига 61.1% (p90 47.7), т.е. шумът гаси
+        # всяка зона. 4-тримесечната плъзгаща сепарира епохите чисто:
+        # 2015-19 max 38.7 срещу 2005-08 med 39.8. Суровото г/г остава видимо
+        # на графиката като тънка прекъсната линия.
+        "transform": "yoy_roll4",
         "is_rate": False,
         "historical_start": "2000-01-01",
         "release_schedule": "quarterly",

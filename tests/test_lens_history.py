@@ -37,6 +37,7 @@ from analysis.lens_history import (
     write_history,
     yearly_table,
 )
+from analysis.temperature import hot_keys_str, temperature
 from catalog.series import SERIES_CATALOG, series_by_source
 from config import MODULE_WEIGHTS
 from core.scorer import compute_composite_score, compute_lens_reports, score_series
@@ -137,7 +138,8 @@ def test_last_row_equals_the_live_computation_bit_for_bit(cache_snapshot, live_h
     """Рязането при `t_live` е no-op → редът е ТЪЖДЕСТВЕН на живото.
 
     ТОЧНО равенство, не approx: историята минава през същия скорер, затова
-    всяко разминаване значи, че двигателят е раздвоен.
+    всяко разминаване значи, че двигателят е раздвоен. Мандат №47 разширява
+    гейта и върху температурата — тя минава по същия път.
     """
     reports = compute_lens_reports(SERIES_CATALOG, cache_snapshot)
     composite = compute_composite_score(
@@ -149,6 +151,10 @@ def test_last_row_equals_the_live_computation_bit_for_bit(cache_snapshot, live_h
     for lens in MODULE_WEIGHTS:
         assert last[f"score_{lens}"] == reports[lens]["score"], lens
         assert last[f"z_{lens}"] == reports[lens]["health_z"], lens
+
+    live_temp = temperature(SERIES_CATALOG, cache_snapshot)
+    assert int(last["temp_count"]) == live_temp["n_hot"]
+    assert last["temp_hot"] == hot_keys_str(live_temp)
 
 
 def test_the_live_row_sits_on_the_last_observation(cache_snapshot, live_history):
@@ -277,6 +283,32 @@ def test_journal_is_born_with_the_mandated_columns(reports_and_composite, tmp_pa
     assert len(journal) == 1
     assert journal["date"].iloc[0] == "2026-07-28"
     assert journal["composite"].iloc[0] == composite
+
+
+def test_journal_records_the_temperature_of_the_run(reports_and_composite, cache_snapshot,
+                                                    tmp_path):
+    """Мандат №47: живият запис носи и колко бум-серии са горели в този пуск."""
+    reports, composite = reports_and_composite
+    temp = temperature(SERIES_CATALOG, cache_snapshot)
+    path = tmp_path / "journal.csv"
+    journal = append_journal(reports, composite, today=date(2026, 7, 28),
+                            path=path, temp=temp)
+
+    assert "temp_count" in journal.columns
+    assert int(journal["temp_count"].iloc[0]) == temp["n_hot"]
+    assert "temp_hot" not in journal.columns   # кой гори живее в решетката
+
+
+def test_a_run_without_a_temperature_leaves_the_cell_empty_not_zero(
+        reports_and_composite, tmp_path):
+    """Нула горещи е ЛЕГИТИМЕН отговор (2015-19). „Не е мерено" не бива да се
+    маскира като „мерено, никой не гори" — иначе старите редове лъжат."""
+    reports, composite = reports_and_composite
+    path = tmp_path / "journal.csv"
+    journal = append_journal(reports, composite, today=date(2026, 7, 28), path=path)
+
+    assert pd.isna(journal["temp_count"].iloc[0])
+    assert pd.isna(load_journal(path)["temp_count"].iloc[0])   # и след round-trip
 
 
 def test_journal_appends_one_row_per_new_date(reports_and_composite, tmp_path):

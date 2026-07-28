@@ -6,6 +6,7 @@ tests/test_form_canon.py
 Изводът първо · линк на всяко име към първоизточника · обяснение на място ·
 един речник · методология при уреда · застоялото наблюдение маркирано.
 """
+import html as _html
 from datetime import date
 
 import pandas as pd
@@ -268,13 +269,95 @@ def test_html_methodology_names_the_lens_count_and_the_rebalance(rendered):
     assert "не се сравнява" in rendered
 
 
-def test_html_explains_the_property_lens_and_its_ambiguous_polarity(rendered):
-    """ФОРМА-КАНОН: обяснението стои ПРИ уреда. Бум-полярността е под преглед и
-    лицето го казва, вместо да я представя за уредено решение."""
+def test_html_explains_the_property_lens_and_its_resolved_polarity(rendered):
+    """ФОРМА-КАНОН: обяснението стои ПРИ уреда. След №47 двузначността е
+    РЕШЕНА — лицето вече не я обявява за отворен въпрос."""
     assert "<h4>Имоти и строителство</h4>" in rendered
-    for token in ("prices", "activity", "pipeline", "под преглед",
-                  "разрешителните", "риск утре"):
+    for token in ("prices", "activity", "pipeline", "решена",
+                  "разрешителните", "риск утре", "4-тримесечна плъзгаща"):
         assert token in rendered, token
+    assert "под преглед" not in rendered
+
+
+# ── Мандат №47: оптималните зони + термометърът ──────────────────────────────
+
+def test_html_methodology_explains_the_optimal_zones(rendered):
+    """Числото не пътува без обяснението си: зони, наклон, provenance, гейт."""
+    from catalog.polarity import OPT_PROVENANCE, OPT_SOURCE_NOTE
+
+    assert "<h4>Оптималните зони и температурата</h4>" in rendered
+    assert OPT_SOURCE_NOTE in rendered
+    for token in ("оптимална зона", "плато", "1σ", "не участват"):
+        assert token in rendered, token
+    for provenance in OPT_PROVENANCE.values():
+        assert _html.escape(provenance) in rendered
+
+
+def test_html_methodology_prints_the_zone_table_from_the_polarity_map(rendered):
+    """Праговете се ГЕНЕРИРАТ от POLARITY — нула преписани числа в лицето."""
+    from analysis.temperature import zone_table
+
+    for z in zone_table(SERIES_CATALOG):
+        assert f"<td>{z['lo']:.0f} … {z['hi']:.0f}%</td>" in rendered, z["key"]
+        assert f"<td>{z['s']:.0f} пп</td>" in rendered, z["key"]
+
+
+def test_html_hero_carries_the_overheating_badge(rendered_with_temp):
+    """Баджът до режимния етикет: „Прегряване: N/5" + tooltip кой гори."""
+    html, temp = rendered_with_temp
+    assert f"Прегряване: {temp['n_hot']}/{temp['n_total']}" in html
+    assert 'class="temp-badge temp-warm"' in html
+    for e in temp["hot"]:
+        assert _html.escape(e["name_bg"]) in html
+        assert f"{e['value']:.1f} (зона до {e['hi']:.0f})" in html
+
+
+def test_the_badge_colour_follows_the_count(tmp_path):
+    """Сиво при 0 · оранж 1-2 · червено ≥3 — нивото идва от temp_level."""
+    from export.weekly_briefing import _temp_badge_html
+
+    assert _temp_badge_html({"n_hot": 0, "n_total": 5, "hot": []}).count("temp-cold") == 1
+    assert "не е над зоната си" in _temp_badge_html({"n_hot": 0, "n_total": 5, "hot": []})
+    warm = _temp_badge_html({"n_hot": 2, "n_total": 5,
+                             "hot": [{"name_bg": "Х", "value": 21.0, "hi": 12.0}]})
+    assert "temp-warm" in warm
+    hot = _temp_badge_html({"n_hot": 4, "n_total": 5,
+                            "hot": [{"name_bg": "Х", "value": 21.0, "hi": 12.0}]})
+    assert "temp-hot" in hot
+    assert _temp_badge_html(None) == ""
+
+
+def test_html_film_carries_the_temperature_band(rendered_with_temp):
+    """Лентата под филма: барове 0-5 по кварталните редове + подпис."""
+    html, _ = rendered_with_temp
+    assert '"temp":' in html
+    assert "Температурата: колко бум-серии са над зоната си" in html
+    assert "абсолютни котви — валидни и назад" in html
+    assert 'id="film-temp-note"' in html
+    assert 'yaxis: "y2"' in html
+
+
+def test_the_film_band_colours_come_from_python_not_js():
+    """Нула аритметика в JS — стойността И цветът на всеки бар идват готови."""
+    from analysis.lens_history import history_columns
+    from analysis.temperature import TEMP_SERIES
+    from export.weekly_briefing import TEMP_COLORS, _prep_film_data
+
+    df = pd.DataFrame(
+        [
+            {"composite": 50.0, "temp_count": 0, "temp_hot": "", "row_type": "quarter"},
+            {"composite": 51.0, "temp_count": 2, "temp_hot": "A+B", "row_type": "quarter"},
+            {"composite": 52.0, "temp_count": 4, "temp_hot": "A+B+C+D", "row_type": "quarter"},
+        ],
+        index=pd.DatetimeIndex(["2024-03-01", "2024-06-01", "2024-09-01"], name="date"),
+    ).reindex(columns=history_columns())
+
+    band = _prep_film_data(df)["temp"]
+    assert band["values"] == [0, 2, 4]
+    assert band["colors"] == [
+        TEMP_COLORS["cold"], TEMP_COLORS["warm"], TEMP_COLORS["hot"]
+    ]
+    assert band["max"] == len(TEMP_SERIES)
 
 
 def test_html_property_rows_link_to_the_eurostat_datasets(rendered):
@@ -430,6 +513,32 @@ def test_html_without_history_skips_the_film_card(rendered):
     """Стар пуск без история не рисува празна рамка."""
     assert "Филмът: композитът през времето" not in rendered
     assert 'id="film-chart"' not in rendered
+
+
+@pytest.fixture
+def rendered_with_temp(tmp_path):
+    """Лицето с термометър: две серии над зоните си → „Прегряване: 2/5"."""
+    from core.scorer import compute_composite_score, compute_lens_reports, get_regime
+    from analysis.lens_history import build_history
+    from analysis.temperature import temperature
+
+    idx = pd.date_range(end="2026-06-01", periods=300, freq="MS")
+    snapshot = {key: pd.Series([1.0, 3.0] * 150, index=idx) for key in SERIES_CATALOG}
+    # BG_HPI е ГОТОВ г/г темп (transform=level) → 14.8% над зона 0–10
+    snapshot["BG_HPI"] = pd.Series([14.8] * 300, index=idx)
+    # Кредитът за домакинствата расте с 21% годишно → над зона 0–12
+    snapshot["BG_LOANS_HH"] = pd.Series(
+        [100.0 * (1.21 ** (i / 12.0)) for i in range(300)], index=idx
+    )
+
+    reports = compute_lens_reports(SERIES_CATALOG, snapshot)
+    composite = compute_composite_score({l: r["score"] for l, r in reports.items()})
+    history = build_history(SERIES_CATALOG, snapshot, grid_start="2023-12-01")
+    temp = temperature(SERIES_CATALOG, snapshot)
+    out = tmp_path / "index.html"
+    generate_html(snapshot, reports, composite, get_regime(composite), str(out),
+                  history=history, wow=None, temp=temp)
+    return out.read_text(encoding="utf-8"), temp
 
 
 def test_html_flags_a_stale_observation(tmp_path):

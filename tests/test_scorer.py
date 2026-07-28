@@ -12,6 +12,7 @@ import math
 import pandas as pd
 import pytest
 
+from catalog.polarity import U_BAND
 from core.primitives import robust_stats_latest
 from core.scorer import (
     TANH_SLOPE,
@@ -143,6 +144,116 @@ def test_polarity_is_serialised_as_string():
     s = _monthly([1.0, 3.0] * 60 + [2.0])
     assert score_series(s, "level", ("U", "target", 2.0))["polarity"] == "U:target=2.0"
     assert score_series(s, "level", -1)["polarity"] == "-1"
+
+
+# ── Оптималната зона (мандат №47) ────────────────────────────────────────────
+# Кривата: плато в [lo, hi] → спад по 1σ на всеки `s` пункта извън нея.
+# АБСОЛЮТНА — нормата (median/MAD) не участва.
+
+ZONE = ("OPT", 0.0, 12.0, 6.0)
+PLATEAU_SCORE = round(50.0 * (1.0 + math.tanh(U_BAND / TANH_SLOPE)), 1)  # 73.1
+
+
+def _opt_score(x, polarity=ZONE, base=None):
+    """Score на стойност `x` при OPT полярност, върху произволна норма.
+
+    Базата е разнообразна нарочно: при `[1, 3]` една от тестваните стойности
+    занулява MAD и серията влиза в degenerate guard-а (неутрално 50) — тогава
+    тестът щеше да мери guard-а, не кривата.
+    """
+    base = [1.0, 3.0, 5.0, 7.0] * 30 if base is None else base
+    return score_series(_monthly(base + [x]), "level", polarity)
+
+
+def test_inside_the_zone_the_health_plateaus_at_the_u_band():
+    """Плато = ЗДРАВЕ (както U-формата в центъра си), не неутралност."""
+    for x in (0.0, 1.0, 6.0, 11.9, 12.0):
+        res = _opt_score(x)
+        assert res["health_z"] == pytest.approx(U_BAND), x
+        assert res["score"] == pytest.approx(PLATEAU_SCORE), x
+
+
+def test_one_slope_width_above_the_zone_scores_exactly_fifty():
+    """hi + s → health-z = 0 → точно 50: „на нормата“, вече не здраво."""
+    assert _opt_score(18.0)["health_z"] == pytest.approx(0.0)
+    assert _opt_score(18.0)["score"] == pytest.approx(50.0)
+
+
+def test_the_score_falls_by_one_sigma_per_slope_width():
+    """Линейният наклон извън зоната: 1σ на всеки `s` пункта."""
+    assert _opt_score(15.0)["health_z"] == pytest.approx(0.5)    # hi + s/2
+    assert _opt_score(24.0)["health_z"] == pytest.approx(-1.0)   # hi + 2s
+    assert _opt_score(30.0)["health_z"] == pytest.approx(-2.0)   # hi + 3s
+    assert _opt_score(30.0)["score"] == pytest.approx(
+        round(50.0 * (1.0 + math.tanh(-2.0 / TANH_SLOPE)), 1)
+    )
+
+
+def test_the_curve_is_continuous_at_the_upper_edge():
+    """Няма скок на прага — иначе 11.99 и 12.01 биха били различни светове."""
+    just_in = _opt_score(11.999)["health_z"]
+    just_out = _opt_score(12.001)["health_z"]
+    assert just_out == pytest.approx(just_in, abs=1e-3)
+
+
+def test_below_the_lower_bound_the_penalty_mirrors_the_upper_one():
+    """Спадът под lo е СИМЕТРИЧЕН — свиващ се кредит не е здраве."""
+    zone = ("OPT", 0.0, 12.0, 6.0)
+    above = _opt_score(12.0 + 9.0, zone)["health_z"]
+    below = _opt_score(0.0 - 9.0, zone)["health_z"]
+    assert above == pytest.approx(below)
+    assert below == pytest.approx(U_BAND - 1.5)
+
+
+def test_a_boom_deep_above_the_zone_saturates_near_zero():
+    """2007: фирменият кредит на 72.4% г/г → сатурация, не „отличник“."""
+    res = _opt_score(72.4)
+    assert res["score"] < 2.0
+
+
+def test_the_zone_is_absolute_and_ignores_the_local_norm():
+    """Ядрото на П2: същата стойност → същият score, каквато и да е нормата.
+
+    Робастният z би дал ДРУГО число при бум прозорец (нормата се вдига заедно с
+    серията и уредът аплодира прегряването) — точно това гасят котвите.
+    """
+    calm = _opt_score(20.0, base=[1.0, 3.0] * 60)
+    boom = _opt_score(20.0, base=[18.0, 22.0] * 60)
+    assert calm["health_z"] == pytest.approx(boom["health_z"])
+    assert calm["score"] == boom["score"]
+
+    linear_calm = score_series(_monthly([1.0, 3.0] * 60 + [20.0]), "level", +1)
+    linear_boom = score_series(_monthly([18.0, 22.0] * 60 + [20.0]), "level", +1)
+    assert linear_calm["score"] != linear_boom["score"]
+
+
+def test_the_optimal_zone_is_serialised_as_a_readable_string():
+    assert _opt_score(5.0)["polarity"] == "OPT[0..12]/6"
+    assert _opt_score(5.0, ("OPT", -20.0, 40.0, 15.0))["polarity"] == "OPT[-20..40]/15"
+
+
+def test_a_too_short_series_falls_back_to_neutral_fifty_and_the_thermometer_covers_it():
+    """ДЕКЛАРИРАНОТО ограничение (мандат №47 §А1).
+
+    Под 12 наблюдения скорерът няма норма и връща неутрално 50 — включително за
+    OPT серия, чиято зона е абсолютна и би могла да се произнесе. Това бие само
+    в най-ранните редове на реконструкцията (до 2009 при кредитните серии) и е
+    прието: температурният слой мери СЪЩИТЕ серии независимо от скорера, затова
+    бумът 2006-2008 се вижда в `temp_count` дори където score-ът мълчи.
+    """
+    short = _monthly([30.0] * 8)          # далеч над зоната, но твърде къса
+    res = score_series(short, "level", ZONE)
+
+    assert res["score"] == pytest.approx(50.0)
+    assert res["health_z"] == pytest.approx(0.0)
+
+
+def test_a_boom_series_scores_lower_under_the_zone_than_under_plus_one():
+    """Композитът пада ЗАЩОТО бумът вече не се брои за здраве."""
+    boom = [18.0, 22.0] * 60
+    with_zone = score_series(_monthly(boom + [21.0]), "level", ZONE)["score"]
+    with_plus_one = score_series(_monthly(boom + [21.0]), "level", +1)["score"]
+    assert with_zone < with_plus_one
 
 
 # ── Трансформация преди скоринга ─────────────────────────────────────────────

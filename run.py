@@ -25,6 +25,7 @@ sys.path.insert(0, str(BASE_DIR))
 
 from sources import build_adapters
 from sources.manual_seed import splice_loans
+from analysis.temperature import temperature
 from catalog.series import SERIES_CATALOG, series_by_source, validate_catalog
 from core.primitives import apply_transform
 from core.scorer import (
@@ -84,6 +85,13 @@ def cmd_status(args):
     print("Скала: 50 = близката 10-годишна норма (робастен z, tanh); "
           "инфлацията се мери като отклонение от 2%.")
 
+    # Температурният слой (мандат №47) — колко бум-серии са над зоната си.
+    temp = temperature(SERIES_CATALOG, snapshot)
+    hot_str = " · ".join(
+        f"{e['key']} {e['value']:.1f} > {e['hi']:.0f}" for e in temp["hot"]
+    ) or "нито една над зоната си"
+    print(f"🌡 Прегряване: {temp['n_hot']}/{temp['n_total']} ({hot_str})")
+
     for lens, rep in lens_reports.items():
         z = rep["health_z"]
         z_str = f"z={z:+.2f}" if z is not None else "няма данни"
@@ -124,19 +132,21 @@ def cmd_briefing(args):
     snapshot, lens_reports, composite, regime = _score_everything(force=args.refresh)
 
     # Реконструираната история се пресмята от СЪЩИЯ snapshot — последният ѝ ред
-    # е тъждествен на живото изчисление отгоре.
+    # е тъждествен на живото изчисление отгоре (вкл. `temp_count`).
     history = build_history(SERIES_CATALOG, snapshot)
     write_history(history)
+
+    temp = temperature(SERIES_CATALOG, snapshot)
 
     # РЕДЪТ Е ВАЖЕН: append ПРЕДИ wow. Записът за днес се ЗАМЕНЯ при повторен
     # пуск, а делтата се чете спрямо предишната ДАТА — така вторият пуск в
     # същия ден показва същото, а не нула.
-    append_journal(lens_reports, composite)
+    append_journal(lens_reports, composite, temp=temp)
     wow = wow_delta(load_journal())
 
     output_file = BASE_DIR / "output" / "index.html"
     generate_html(snapshot, lens_reports, composite, regime, str(output_file),
-                  history=history, wow=wow)
+                  history=history, wow=wow, temp=temp)
     return 0
 
 
@@ -168,6 +178,7 @@ def cmd_export_context(args):
         today=today,
         history=history,
         wow=wow,
+        temp=temperature(SERIES_CATALOG, snapshot),
     )
     return 0
 

@@ -5,6 +5,7 @@ export/weekly_briefing.py
 """
 import html as _html
 import json
+import math
 from datetime import date, datetime
 from pathlib import Path
 
@@ -19,6 +20,8 @@ from config import (
     MODULE_WEIGHTS,
 )
 from analysis.lens_history import HONESTY_LABEL, ROW_LIVE, ROW_QUARTER
+from analysis.temperature import TEMP_SERIES, temp_level, zone_table
+from catalog.polarity import OPT_SOURCE_NOTE, U_BAND
 from catalog.series import SERIES_CATALOG
 from core.display import (
     is_stale,
@@ -27,7 +30,18 @@ from core.display import (
     thin_window_note,
     verdict_sentence,
 )
-from core.primitives import apply_transform
+from core.primitives import apply_transform, compute_yoy_pct
+from core.scorer import TANH_SLOPE
+
+
+# ── Температурният слой: цветовете на трите нива (мандат №47) ────────────────
+# Сиво при 0 · оранж при 1-2 · червено при ≥3. Нивото идва от
+# `analysis.temperature.temp_level` — праговете не се преизмислят тук.
+TEMP_COLORS = {
+    "cold": "#8892a4",
+    "warm": "#ff9800",
+    "hot":  "#ef4444",
+}
 
 
 # ── Броят лещи не е зашит никъде в текста (мандат №43) ───────────────────────
@@ -121,6 +135,15 @@ def _prep_chart_data(snapshot: dict) -> dict:
             entry["values_raw"] = [
                 round(float(v), 4) if pd.notna(v) else None for v in raw_recent.values
             ]
+            entry["raw_name"] = "тримесечно"
+        elif transform == "yoy_roll4":
+            # Мандат №47: под плъзгащата стои СУРОВОТО г/г — не суровият индекс.
+            # Изгладената линия носи котвата, но шумът остава видим.
+            raw_recent = compute_yoy_pct(s_raw).reindex(s_recent.index)
+            entry["values_raw"] = [
+                round(float(v), 4) if pd.notna(v) else None for v in raw_recent.values
+            ]
+            entry["raw_name"] = "тримесечно г/г"
         chart_data[key] = entry
     return chart_data
 
@@ -157,6 +180,21 @@ def _prep_film_data(history) -> dict:
         data["live"] = {
             "date": live.index[-1].strftime("%Y-%m-%d"),
             "value": round(float(live["composite"].iloc[-1]), 1),
+        }
+
+    # ── Температурната лента (мандат №47) ────────────────────────────────────
+    # Барове 0–5 по СЪЩИТЕ тримесечни маркове: колко бум-серии са били над
+    # зоната си. Цветът се решава тук (`temp_level`), в JS не остава аритметика.
+    if "temp_count" in q.columns and q["temp_count"].notna().any():
+        counts = [
+            int(v) if pd.notna(v) else 0 for v in q["temp_count"]
+        ]
+        data["temp"] = {
+            "values": counts,
+            "colors": [TEMP_COLORS[temp_level(c)] for c in counts],
+            "max": len(TEMP_SERIES),
+            "note": ("Температурата: колко бум-серии са над зоната си "
+                     "(абсолютни котви — валидни и назад)"),
         }
     return data
 
@@ -214,6 +252,42 @@ def _prep_wow_data(wow) -> dict:
     }
 
 
+def _temp_badge_html(temp) -> str:
+    """„Прегряване: N/5" до режимния етикет + tooltip кой гори (мандат №47).
+
+    Данните идват ГОТОВИ от `analysis.temperature` — нула смятане в JS и нула
+    прагове, преписани в лицето.
+    """
+    if not temp or not temp.get("n_total"):
+        return ""
+    n_hot, n_total = int(temp["n_hot"]), int(temp["n_total"])
+    level = temp_level(n_hot)
+    if temp.get("hot"):
+        tip = " · ".join(
+            f"{e['name_bg']}: {e['value']:.1f} (зона до {e['hi']:.0f})"
+            for e in temp["hot"]
+        )
+    else:
+        tip = "Нито една бум-серия не е над зоната си."
+    return (
+        f'<span class="temp-badge temp-{level}" title="{_html.escape(tip)}">'
+        f'🌡 Прегряване: {n_hot}/{n_total}</span>'
+    )
+
+
+def _zone_rows_html() -> str:
+    """Зоните като редове на таблица в методологията — от POLARITY, не преписани."""
+    rows = ""
+    for z in zone_table(SERIES_CATALOG):
+        rows += (
+            f"<tr><td>{_html.escape(z['name_bg'])}</td>"
+            f"<td>{z['lo']:.0f} … {z['hi']:.0f}%</td>"
+            f"<td>{z['s']:.0f} пп</td>"
+            f"<td>{_html.escape(z['provenance'])}</td></tr>"
+        )
+    return rows
+
+
 def generate_html(
     snapshot: dict,
     lens_reports: dict,
@@ -222,6 +296,7 @@ def generate_html(
     output_path: str,
     history=None,
     wow=None,
+    temp=None,
 ):
     chart_data = _prep_chart_data(snapshot)
     film_data = _prep_film_data(history)
@@ -316,6 +391,11 @@ def generate_html(
     regime_color = regime["color"]
     regime_name = regime["name"]
     composite_str = _fmt_score(composite)
+    temp_badge = _temp_badge_html(temp)
+    zone_rows = _zone_rows_html()
+    # Score-ът на серия В зоната — смятан, не преписан: платото е U_BAND, точно
+    # както центърът на U-формата, а скалата е фамилната tanh.
+    zone_score = round(50.0 * (1.0 + math.tanh(U_BAND / TANH_SLOPE)), 1)
     weights_str = " · ".join(
         f"{LENS_NAMES_BG.get(m, m).lower()} {w:.0%}" for m, w in MODULE_WEIGHTS.items()
     )
@@ -342,7 +422,10 @@ def generate_html(
     <h2>Филмът: композитът през времето</h2>
     <div class="film-label">{_html.escape(HONESTY_LABEL)}</div>
     <div class="film-grid">
-      <div><div id="film-chart"></div></div>
+      <div>
+        <div id="film-chart"></div>
+        <div class="film-temp-note" id="film-temp-note"></div>
+      </div>
       <div class="wow-block">
         <h3>Какво се смени тази седмица</h3>
         <div id="wow-body"></div>
@@ -381,8 +464,20 @@ def generate_html(
   .regime-hero {{ background:var(--card); border-radius:16px; padding:30px; margin-bottom:30px;
                   border-left:6px solid {regime_color}; display:flex; align-items:center; gap:30px; flex-wrap:wrap; }}
   .regime-score-big {{ font-size:4em; font-weight:800; color:{regime_color}; line-height:1; }}
+  .regime-line {{ display:flex; align-items:center; gap:12px; flex-wrap:wrap; }}
   .regime-label {{ font-size:1.5em; font-weight:600; color:{regime_color}; }}
   .regime-desc {{ color:var(--muted); font-size:0.9em; margin-top:6px; max-width:500px; }}
+
+  /* Термометърът на прегряването (мандат №47) */
+  .temp-badge {{ font-size:0.78em; font-weight:700; padding:4px 10px; border-radius:20px;
+                 cursor:help; letter-spacing:0.3px; white-space:nowrap; }}
+  .temp-cold {{ background:rgba(136,146,164,0.16); color:{TEMP_COLORS['cold']}; }}
+  .temp-warm {{ background:rgba(255,152,0,0.16);   color:{TEMP_COLORS['warm']}; }}
+  .temp-hot  {{ background:rgba(239,68,68,0.18);   color:{TEMP_COLORS['hot']}; }}
+  .film-temp-note {{ color:var(--muted); font-size:0.78em; margin-top:8px; line-height:1.5; }}
+  .zone-table {{ width:100%; border-collapse:collapse; font-size:0.82em; margin:10px 0 4px; }}
+  .zone-table th {{ font-size:0.95em; padding:6px 8px; }}
+  .zone-table td {{ padding:6px 8px; color:var(--muted); vertical-align:top; }}
   .verdict {{ font-size:1.05em; font-weight:600; color:var(--text); margin-top:10px; max-width:560px; line-height:1.45; }}
 
   /* Филмът на композита (мандат №45) */
@@ -390,7 +485,7 @@ def generate_html(
   .film-label {{ color:var(--muted); font-size:0.82em; margin:-8px 0 16px; line-height:1.5; }}
   .film-grid {{ display:grid; grid-template-columns:2.2fr 1fr; gap:24px; align-items:start; }}
   @media(max-width:900px) {{ .film-grid {{ grid-template-columns:1fr; }} }}
-  #film-chart {{ height:300px; }}
+  #film-chart {{ height:340px; }}
   .wow-block h3 {{ font-size:0.8em; text-transform:uppercase; letter-spacing:0.6px;
                    color:var(--muted); margin-bottom:12px; }}
   .wow-since {{ color:var(--muted); font-size:0.78em; margin-bottom:12px; }}
@@ -482,7 +577,10 @@ def generate_html(
       <div style="color:var(--muted); font-size:0.8em; margin-top:4px;">от 100</div>
     </div>
     <div>
-      <div class="regime-label">{regime_name}</div>
+      <div class="regime-line">
+        <span class="regime-label">{regime_name}</span>
+        {temp_badge}
+      </div>
       <div class="verdict">{verdict}</div>
       <div class="regime-desc">
         Композитен макроикономически резултат за България по {len(SERIES_CATALOG)} ключови
@@ -530,16 +628,48 @@ def generate_html(
       механично с четенията отпреди това.
     </p>
 
+    <h4>Оптималните зони и температурата</h4>
+    <p>
+      Бумът вече <b>не се брои за здраве</b>. Пет серии — двата кредитни ръста,
+      цените на жилищата, разрешителните и компенсацията на наетите — се мерят
+      срещу <b>абсолютна оптимална зона</b>, а не срещу собствената си 10-годишна
+      норма. Причината: в бум прозорец нормата сама се вдига и робастният
+      <code>z</code> аплодира прегряването. В зоната здравето е на плато
+      (score ≈ <b>{zone_score}</b>, същото като инфлация точно на целта); над
+      горния праг score-ът пада с 1σ на всеки <code>s</code> пункта, под долния —
+      симетрично. Медианата и MAD-скалата <b>не участват</b>.
+    </p>
+    <table class="zone-table">
+      <thead><tr><th>Серия</th><th>Зона</th><th>1σ на</th><th>Откъде е прагът</th></tr></thead>
+      <tbody>{zone_rows}</tbody>
+    </table>
+    <p>
+      {OPT_SOURCE_NOTE} <b>Термометърът</b> („Прегряване: N/5" горе и лентата под
+      филма) брои САМО нарушенията НАГОРЕ — колко от петте серии стоят над зоната
+      си. Под долния праг е криза/кредитен крънч; той се чете в score-а, който
+      пада и в двете посоки, не в термометъра. Праговете са абсолютни, затова
+      температурата е смятаема и назад във времето без да знае бъдещето:
+      2007-08 свети 4-5 от 5, а спокойните 2015-2019 мълчат на нула.
+      <b>Внимание при сравнение назад:</b> съставът на уреда се смени с тези
+      полярности — композитът е на същата 0–100 скала, но не се сравнява
+      механично с четенията отпреди.
+    </p>
+
     <h4>Имоти и строителство</h4>
     <p>
       Шестата леща стои на <b>три различни въпроса</b>, затова има три отделни
       групи: колко струва жилището (<code>prices</code> — индексът на цените на
       жилищата, г/г), колко се строи днес (<code>activity</code> — строителната
       продукция) и колко влиза в тръбата (<code>pipeline</code> — разрешителните
-      за строеж по разгъната площ, водещият индикатор). Полярността и на трите е
-      <b>+1</b> и е <b>под преглед</b>: бум в цените и разрешителните е здраве
-      днес и риск утре — същата двузначност като при заплатите и заемния ръст,
-      и трите се решават заедно, не поотделно.
+      за строеж по разгъната площ, водещият индикатор). Двузначността „бум =
+      здраве днес, риск утре" при цените и разрешителните е <b>решена</b>: двете
+      минаха на оптимални зони (виж по-горе). Строителната продукция остава
+      <b>+1</b> — тя е текуща реална активност, не цена на актив и не тръба.
+      Разрешителните се четат като <b>4-тримесечна плъзгаща</b> на годишния темп:
+      суровото тримесечно г/г скача толкова, че никакъв абсолютен праг не
+      издържа (в спокойните 2015-19 то стига 61%, докато плъзгащата остава под
+      39%). Суровата линия е видима на графиката, но котвата стъпва на
+      изгладената.
     </p>
 
     <h4>As-of дисциплина</h4>
@@ -698,7 +828,7 @@ function showChart(key) {{
       y: data.values_raw,
       type: "scatter",
       mode: "lines",
-      name: "тримесечно",
+      name: data.raw_name || "тримесечно",
       line: {{ color: color, width: 1, dash: "dash" }},
       opacity: 0.4,
       hovertemplate: "%{{x|%b %Y}} (тримесечно): <b>%{{y:.2f}}</b><extra></extra>"
@@ -780,6 +910,33 @@ const WOW_DATA = {json.dumps(wow_data, ensure_ascii=False)};
     hovermode: "x unified",
     showlegend: false
   }};
+
+  // Температурната лента: отделен под-panel под композита, обща x-ос.
+  // Стойностите и цветовете идват ГОТОВИ от Python — тук само се рисува.
+  if (FILM_DATA.temp) {{
+    traces.push({{
+      x: FILM_DATA.dates,
+      y: FILM_DATA.temp.values,
+      type: "bar",
+      name: "прегряване",
+      yaxis: "y2",
+      marker: {{ color: FILM_DATA.temp.colors }},
+      hovertemplate: "%{{x|%b %Y}}: <b>%{{y}}</b> бум-серии над зоната<extra></extra>"
+    }});
+    layout.yaxis.domain = [0.30, 1.0];
+    layout.yaxis2 = {{
+      domain: [0.0, 0.20],
+      range: [0, FILM_DATA.temp.max],
+      dtick: FILM_DATA.temp.max,
+      gridcolor: "#1e2130",
+      color: "#8892a4",
+      anchor: "x"
+    }};
+    layout.xaxis.anchor = "y2";
+    layout.bargap = 0.25;
+    const note = document.getElementById("film-temp-note");
+    if (note) note.textContent = FILM_DATA.temp.note;
+  }}
 
   Plotly.newPlot("film-chart", traces, layout, {{displayModeBar: false, responsive: true}});
 }})();

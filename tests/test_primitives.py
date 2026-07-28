@@ -13,6 +13,7 @@ from core.primitives import (
     apply_transform,
     compute_roll4q_mean,
     compute_yoy_pct,
+    compute_yoy_roll4,
     robust_stats_latest,
 )
 
@@ -68,6 +69,41 @@ def test_yoy_pct_on_monthly_index_uses_twelve_periods():
 
     assert yoy.iloc[:12].isna().all()
     assert yoy.iloc[12] == pytest.approx(5.0)
+
+
+# ── yoy_roll4: изгладеният годишен темп (мандат №47 §А2) ─────────────────────
+
+def test_yoy_roll4_is_the_four_period_mean_of_the_year_on_year_rate():
+    """Аритметичният пин: първо темпът, после изглаждането — в този ред."""
+    s = _quarterly([100, 100, 100, 100, 110, 120, 130, 140])
+    r = compute_yoy_roll4(s)
+
+    # Първите 4 нямат г/г; 5-та…7-ма нямат пълен 4-периоден прозорец
+    assert r.iloc[:7].isna().all()
+    # г/г: +10, +20, +30, +40 → средно 25
+    assert r.iloc[7] == pytest.approx(25.0)
+
+
+def test_yoy_roll4_reachable_through_apply_transform():
+    s = _quarterly([100, 100, 100, 100, 110, 120, 130, 140])
+    pd.testing.assert_series_equal(compute_yoy_roll4(s), apply_transform(s, "yoy_roll4"))
+
+
+def test_yoy_roll4_smooths_a_single_quarter_spike_in_the_growth_rate():
+    """Причината серията да мине на плъзгаща: едно тримесечие не бива да чупи
+    абсолютния праг (разрешителните скачат ±60% на тримесечие)."""
+    s = _quarterly([100, 100, 100, 100, 105, 105, 105, 200])
+    raw = compute_yoy_pct(s)
+    smooth = compute_yoy_roll4(s)
+
+    assert raw.iloc[7] == pytest.approx(100.0)      # суровото г/г: +100%
+    assert smooth.iloc[7] == pytest.approx(28.75)   # (5+5+5+100)/4
+    assert smooth.iloc[7] < raw.iloc[7]
+
+
+def test_yoy_roll4_inherits_the_zero_base_guard():
+    s = _quarterly([0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0])
+    assert not np.isinf(compute_yoy_roll4(s).to_numpy()).any()
 
 
 # ── Zero-base guard (порт от EU) ─────────────────────────────────────────────
