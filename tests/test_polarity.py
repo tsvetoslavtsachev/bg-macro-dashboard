@@ -154,8 +154,15 @@ def test_the_boom_polarities_are_no_longer_declared_under_review():
 
 
 def test_every_catalog_series_has_an_explicit_polarity():
-    """Нито една серия не бива да минава на мълчаливия default."""
-    for key in SERIES_CATALOG:
+    """Нито една СКОРИРАНА серия не бива да минава на мълчаливия default.
+
+    Мандат №48: контекстните серии (`context_only: True`) не влизат в никоя
+    леща и НИКОГА не се скорират — полярност за тях би била мъртва декларация,
+    която подсказва участие в композита. Пазачът остава за всичко останало.
+    """
+    for key, spec in SERIES_CATALOG.items():
+        if spec.get("context_only"):
+            continue
         assert key in POLARITY, key
 
 

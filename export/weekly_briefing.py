@@ -12,6 +12,10 @@ from pathlib import Path
 import pandas as pd
 
 from config import (
+    CONTEXT_BADGE_BG,
+    CONTEXT_BADGE_COLORS,
+    CONTEXT_LINE_COLOR,
+    CONTEXT_SCORE_NOTE,
     LENS_BADGE_COLORS,
     LENS_BADGES_BG,
     LENS_LINE_COLORS,
@@ -21,9 +25,12 @@ from config import (
 )
 from analysis.lens_history import HONESTY_LABEL, ROW_LIVE, ROW_QUARTER
 from analysis.temperature import TEMP_SERIES, temp_level, zone_table
-from catalog.polarity import OPT_SOURCE_NOTE, U_BAND
+from catalog.polarity import INFLATION_TARGET, OPT_SOURCE_NOTE, U_BAND
 from catalog.series import SERIES_CATALOG
 from core.display import (
+    ANCHOR_DISCLAIMER,
+    fmt_target,
+    inflation_voices,
     is_stale,
     source_url,
     stale_note,
@@ -108,6 +115,18 @@ def _compute_as_of(snapshot: dict) -> str | None:
     return max(last_dates).strftime("%Y-%m")
 
 
+def _chart_palette_key(spec: dict) -> str:
+    """Кой цвят носи серията на графиката.
+
+    Контекстната серия (мандат №48) няма леща → без този клон fallback-ът щеше
+    да я оцвети като РАСТЕЖ и лицето щеше да твърди лещова принадлежност, която
+    тя няма. Сивото казва „наблюдение, не компонент".
+    """
+    if spec.get("context_only"):
+        return "context"
+    return spec["lens"][0] if spec.get("lens") else "growth"
+
+
 def _prep_chart_data(snapshot: dict) -> dict:
     chart_data = {}
     cutoff = pd.Timestamp.now() - pd.DateOffset(years=12)
@@ -126,7 +145,7 @@ def _prep_chart_data(snapshot: dict) -> dict:
             "name": spec["name_bg"],
             "dates": [d.strftime("%Y-%m-%d") for d in s_recent.index],
             "values": [round(float(v), 4) for v in s_recent.values],
-            "lens": spec["lens"][0] if spec.get("lens") else "growth",
+            "lens": _chart_palette_key(spec),
             "is_rate": spec.get("is_rate", False),
         }
         if transform == "roll4q_mean":
@@ -288,6 +307,47 @@ def _zone_rows_html() -> str:
     return rows
 
 
+def _anchor_card(voices: dict) -> str:
+    """Котвената лента: инфлацията, мерена в пп от целта (мандат №48).
+
+    Вторият глас стои ДО модул-баровете, а не в тях — затова лентата носи
+    изричното изречение, че композитът е недокоснат. Празни данни → няма лента,
+    а не празна рамка (същото правило като при филма).
+    """
+    anchors = voices.get("anchors") or []
+    perceived = voices.get("perceived")
+    if not anchors and not perceived:
+        return ""
+
+    rows = ""
+    for a in anchors:
+        rows += f"""
+      <div class="anchor-row">
+        <span class="anchor-dot" style="background:{a['color']}"></span>
+        <span class="anchor-name">{_html.escape(a['name_bg'])}</span>
+        <span class="anchor-sentence">{_html.escape(a['value_str'])} =
+          <b>{_html.escape(a['gap_phrase'])}</b> — {_html.escape(a['zone_phrase'])}</span>
+      </div>"""
+
+    if perceived:
+        rows += f"""
+      <div class="anchor-row anchor-context">
+        <span class="anchor-dot anchor-dot-ctx"></span>
+        <span class="anchor-name">{_html.escape(perceived['name_bg'])}</span>
+        <span class="anchor-sentence">{_html.escape(perceived['sentence'])}</span>
+      </div>"""
+
+    return f"""
+  <!-- Котвената лента: инфлацията с абсолютни зони (мандат №48) -->
+  <div class="anchor-card">
+    <h2>Инфлацията с котви</h2>
+    <div class="anchor-rows">{rows}
+    </div>
+    <div class="anchor-note">{_html.escape(voices.get('disclaimer', ''))}</div>
+  </div>
+"""
+
+
 def generate_html(
     snapshot: dict,
     lens_reports: dict,
@@ -313,8 +373,9 @@ def generate_html(
     # ── Latest values table ──────────────────────────────────────────────────
     rows_html = ""
     for key, spec in SERIES_CATALOG.items():
-        lens = spec["lens"][0] if spec.get("lens") else "growth"
-        badge = LENS_BADGES_BG.get(lens, lens)
+        is_context = bool(spec.get("context_only"))
+        lens = _chart_palette_key(spec)
+        badge = CONTEXT_BADGE_BG if is_context else LENS_BADGES_BG.get(lens, lens)
         hint = _html.escape(spec.get("narrative_hint", "") or "")
         url = source_url(spec.get("source", ""), spec.get("id", ""))
         name_html = _html.escape(spec["name_bg"])
@@ -362,6 +423,17 @@ def generate_html(
                 f'<span class="thin" title="'
                 f'{_html.escape(thin_window_note(res.get("percentile_window")))}">⚠</span> '
             )
+        if is_context:
+            # Контекстната серия НЯМА score — и го казва, вместо да покаже тире,
+            # което читателят би прочел като „липсват данни".
+            score_cell = (
+                f'<td class="ctx-score" title="{_html.escape(CONTEXT_SCORE_NOTE)}">—</td>'
+            )
+        else:
+            score_cell = (
+                f'<td style="color:{_score_color(score_val)}">'
+                f'{thin_mark}<b>{_fmt_score(score_val)}</b></td>'
+            )
         rows_html += f"""
             <tr onclick="showChart('{key}')" style="cursor:pointer">
                 {name_cell}
@@ -369,7 +441,7 @@ def generate_html(
                 <td>{last_date}</td>
                 <td><b>{last_val:.2f}</b></td>
                 <td class="{delta_cls}">{delta_str}</td>
-                <td style="color:{_score_color(score_val)}">{thin_mark}<b>{_fmt_score(score_val)}</b></td>
+                {score_cell}
             </tr>"""
 
     # ── Module score bars ────────────────────────────────────────────────────
@@ -403,13 +475,20 @@ def generate_html(
 
     # Палитрата се генерира от ЕДИНИЯ речник в config.py — CSS баджовете тук,
     # линиите и запълването в JS по-долу. Нова леща = един ред в config.
+    # Контекстният сив (мандат №48) се долепя на трите места наведнъж, точно
+    # както лещовите цветове — не се пише на ръка в CSS-а и в JS-а поотделно.
+    badge_colors = dict(LENS_BADGE_COLORS, context=CONTEXT_BADGE_COLORS)
+    line_colors = dict(LENS_LINE_COLORS, context=CONTEXT_LINE_COLOR)
     lens_badge_css = "\n".join(
         f"  .lens-{lens} {{ background:{bg}; color:{fg}; }}"
-        for lens, (bg, fg) in LENS_BADGE_COLORS.items()
+        for lens, (bg, fg) in badge_colors.items()
     )
     lens_fill_colors = {
-        lens: _hex_to_rgba(color, 0.08) for lens, color in LENS_LINE_COLORS.items()
+        lens: _hex_to_rgba(color, 0.08) for lens, color in line_colors.items()
     }
+
+    # ── Котвената лента: инфлацията с абсолютни зони (мандат №48) ────────────
+    anchor_card = _anchor_card(inflation_voices(snapshot))
 
     # ── Филмът на композита (мандат №45) ─────────────────────────────────────
     # Картата се появява само когато има какво да покаже — стар пуск без история
@@ -524,6 +603,22 @@ def generate_html(
   .mod-bar {{ height:100%; border-radius:4px; transition:width 0.5s; }}
   .mod-score {{ width:40px; text-align:right; font-weight:700; font-size:0.95em; }}
   
+  /* Котвената лента (мандат №48) */
+  .anchor-card {{ background:var(--card); border-radius:12px; padding:20px 24px;
+                  margin-bottom:30px; border:1px solid var(--border); }}
+  .anchor-card h2 {{ font-size:1.1em; color:var(--muted); text-transform:uppercase;
+                     letter-spacing:1px; margin-bottom:14px; }}
+  .anchor-row {{ display:flex; align-items:baseline; gap:10px; padding:6px 0;
+                 font-size:0.9em; flex-wrap:wrap; }}
+  .anchor-dot {{ width:10px; height:10px; border-radius:50%; flex-shrink:0; }}
+  .anchor-dot-ctx {{ background:{CONTEXT_LINE_COLOR}; }}
+  .anchor-name {{ color:var(--muted); min-width:210px; }}
+  .anchor-sentence {{ color:var(--text); }}
+  .anchor-context .anchor-sentence {{ color:var(--muted); }}
+  .anchor-note {{ color:var(--muted); font-size:0.8em; margin-top:12px;
+                  line-height:1.5; border-top:1px solid var(--border); padding-top:10px; }}
+  .ctx-score {{ color:var(--muted); cursor:help; }}
+
   /* Two-column layout */
   .two-col {{ display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-bottom:30px; }}
   @media(max-width:900px) {{ .two-col {{ grid-template-columns:1fr; }} }}
@@ -610,6 +705,36 @@ def generate_html(
       Не „ниско = добре" — иначе дефлацията би излизала отличник. Здравето е
       максимално при целта на ЕЦБ (2%) и пада симетрично в двете посоки
       (U-форма). България е в еврозоната от 01.01.2026 → същият център като EA.
+    </p>
+
+    <h4>Инфлацията: двата гласа</h4>
+    <p>
+      В композита инфлацията говори ОТНОСИТЕЛНО (U-score-ът горе): колко
+      отклонението от целта е голямо спрямо СОБСТВЕНАТА разсейка на серията. За
+      агрегация това е верният уред, но за България е системно <b>мек</b> — в
+      страна, свикнала с висока инфлация, „нормалното" отклонение е голямо и 5%
+      излиза по-малко тревожно, отколкото е. И 2007 беше „нормално" висока
+      инфлация.
+      Затова лентата „Инфлацията с котви" носи <b>втори, абсолютен глас</b>:
+      колко <b>процентни пункта</b> сме от целта ({_html.escape(fmt_target(INFLATION_TARGET))}).
+      Зоните са фиксирани: <b>≤1 пп</b> при целта (зелено) ·
+      <b>1–2 пп</b> отклонена (жълто) · <b>&gt;2 пп</b> далеч от целта (червено).
+      Те НЕ са калибрирани по историята — ако бяха, щяха да върнат същата
+      мекота, която котвата поправя. Дефлационната посока минава през същите
+      зони огледално. {_html.escape(ANCHOR_DISCLAIMER)}
+    </p>
+
+    <h4>Усещаната инфлация — контекст, не компонент</h4>
+    <p>
+      Третият ред в котвената лента е ЕК потребителската анкета (Eurostat
+      <code>ei_bsco_m</code>, показател <code>BS-PT-LY</code>): как хората
+      ОЦЕНЯВАТ поскъпването през последните 12 месеца. Числото е качествен
+      <b>баланс</b>, не процент — 75 значи, че огромно мнозинство усеща
+      поскъпване, а не „75% инфлация". Затова серията носи сивия бадж
+      „{CONTEXT_BADGE_BG}", няма score и <b>не влиза в композита</b> — тя е
+      наблюдение ДО официалното число. Стойността ѝ е точно в разликата:
+      когато възприятието стои на нивата от инфлационната криза, а официалната
+      инфлация е кратно по-ниска, това само по себе си е сигнал.
     </p>
 
     <h4>Текущата сметка е 4-тримесечна плъзгаща</h4>
@@ -734,7 +859,7 @@ def generate_html(
     <h2>Компоненти на резултата</h2>
     {module_bars}
   </div>
-
+{anchor_card}
   <!-- Two columns: Table + Chart selector -->
   <div class="two-col">
     <div class="card">
@@ -772,7 +897,7 @@ const CHART_DATA = {json.dumps(chart_data, ensure_ascii=False)};
 
 // Един речник за палитрата (config.py) — CSS баджовете, линиите и запълването
 // не се разминават, а нова леща не иска пипане на три места.
-const LENS_COLORS = {json.dumps(LENS_LINE_COLORS, ensure_ascii=False)};
+const LENS_COLORS = {json.dumps(line_colors, ensure_ascii=False)};
 
 const LENS_BG = {json.dumps(lens_fill_colors, ensure_ascii=False)};
 

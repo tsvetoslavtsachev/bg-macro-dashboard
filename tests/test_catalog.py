@@ -38,9 +38,17 @@ def test_current_account_is_four_quarter_rolling():
 
 # ── Фаза 3.1: БНБ сериите (мандат №39 §А2) ───────────────────────────────────
 
-def test_catalog_carries_seventeen_series():
-    """14 след М42 + трите имотни серии на М43."""
-    assert len(SERIES_CATALOG) == 17
+def test_catalog_carries_eighteen_series_of_which_seventeen_are_scored():
+    """14 след М42 + трите имотни серии на М43 + контекстната на М48.
+
+    Двете числа се държат ОТДЕЛНО нарочно: каталогът расте на 18, но уредът,
+    който произвежда композита, остава на 17. Ако някой ден контекстна серия
+    се промъкне в леща, второто число ще се смени и тестът ще го каже.
+    """
+    assert len(SERIES_CATALOG) == 18
+    scored = [k for k, v in SERIES_CATALOG.items() if not v.get("context_only")]
+    assert len(scored) == 17
+    assert all(SERIES_CATALOG[k]["lens"] for k in scored)
 
 
 def test_loan_series_come_from_the_ecb_bsi_dataset():

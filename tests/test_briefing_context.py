@@ -50,10 +50,10 @@ def test_context_stays_compact_like_the_china_model(context):
     ѝ бележки за качеството → живият файл е ~14 300, фикстурата ~14 200.
     Мандат №45 добавя секцията „Композитът през времето" (етикет + WoW блок +
     годишната таблица ~22 реда) и разширената външна бележка → таванът се вдига
-    на 18 000. Мандат №47 добавя температурната секция (зоните + provenance) и
-    пренаписаните бум-бележки → 22 000. Духът е СЪЩИЯТ: тревога, не бюджет —
-    числото е там, за да ГРЪМНЕ при следващото сериозно раздуване, а не да се
-    вдига по навик.
+    на 18 000. Мандати №47 (температурната секция + пренаписаните бум-бележки)
+    и №48 (котвеният блок + двете инфлационни бележки) заедно → 22 000. Духът е
+    СЪЩИЯТ: тревога, не бюджет — числото е там, за да ГРЪМНЕ при следващото
+    сериозно раздуване, а не да се вдига по навик.
     """
     text, _, _ = context
     assert len(text.encode("utf-8")) < 22_000
@@ -282,6 +282,58 @@ def test_context_flags_a_stale_observation(tmp_path):
         regime=get_regime(composite), output_path=str(out), today=date(2026, 7, 24),
     )
     assert "⚠ 2020-01-01" in out.read_text(encoding="utf-8")
+
+
+# ── Мандат №48: котвеният прочит + усещаната инфлация ────────────────────────
+
+def test_context_carries_the_anchor_block_under_the_inflation_table(context):
+    """Вторият глас пътува с експорта — иначе скилът чете само U-score-а."""
+    text, _, _ = context
+    section = text.split(f"## {LENS_NAMES_BG['inflation']}")[1].split("\n---\n")[0]
+
+    assert "**Котвеният прочит (абсолютни пп от целта):**" in section
+    assert section.index("| Показател |") < section.index("Котвеният прочит")
+    for key in ("BG_HICP", "BG_HICP_CORE"):
+        assert SERIES_CATALOG[key]["name_bg"] in section, key
+    assert "целта (2%)" in section
+    assert "зона" in section
+
+
+def test_context_anchor_block_repeats_that_the_composite_is_untouched(context):
+    from core.display import ANCHOR_DISCLAIMER
+
+    text, _, _ = context
+    assert ANCHOR_DISCLAIMER in text
+
+
+def test_context_carries_the_perceived_inflation_row(context):
+    """Контекстната серия няма лещова секция — влиза през котвения блок."""
+    text, _, _ = context
+    assert "Усещаната (ЕК анкета):" in text
+    assert "баланс, не процент" in text
+    assert "извън композита" in text
+
+
+def test_context_does_not_score_the_perceived_series(context):
+    """Тя няма score никъде — иначе някой ще я цитира като компонент."""
+    text, reports, _ = context
+    scored = {s["key"] for rep in reports.values() for s in rep["series"]}
+    assert "BG_INFL_PERCEIVED" not in scored
+
+
+def test_notes_explain_the_two_voices_and_the_fixed_zones():
+    joined = " ".join(DATA_QUALITY_NOTES)
+    for token in ("ДВА гласа", "котвеният прочит", "≤1 пп", ">2 пп",
+                  "НЕ са калибрирани по историята"):
+        assert token in joined, token
+
+
+def test_notes_explain_the_perceived_series_and_name_the_menu_candidate():
+    """Балансът НЕ е процент, серията е извън композита, а съседът е меню."""
+    joined = " ".join(DATA_QUALITY_NOTES)
+    for token in ("ei_bsco_m", "BS-PT-LY", "БАЛАНС, не",
+                  "context_only", "BS-PT-NY", "МЕНЮ-КАНДИДАТ", "2001-05"):
+        assert token in joined, token
 
 
 # ── Мандат №45: композитът през времето ──────────────────────────────────────
