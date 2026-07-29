@@ -151,7 +151,7 @@ def test_one_vocabulary_covers_every_lens():
 
 def test_lens_badges_are_bulgarian():
     assert set(LENS_BADGES_BG.values()) == {
-        "растеж", "инфлация", "труд", "кредит", "външен", "имоти"
+        "растеж", "инфлация", "труд", "кредит", "външен", "имоти", "фискал"
     }
 
 
@@ -262,11 +262,40 @@ def test_html_radar_and_chart_palette_know_every_lens(rendered):
 
 
 def test_html_methodology_names_the_lens_count_and_the_rebalance(rendered):
-    """„Претеглена средна на петте лещи“ щеше да стане тиха неистина."""
-    assert "Претеглена средна на шестте лещи" in rendered
+    """„Претеглена средна на шестте лещи“ щеше да стане тиха неистина (№50)."""
+    assert "Претеглена средна на седемте лещи" in rendered
+    assert "шестте лещи" not in rendered
     assert "петте лещи" not in rendered
-    assert "имоти и строителство 15%" in rendered
+    assert "имоти и строителство 12%" in rendered
+    assert "държавни финанси 12%" in rendered
     assert "не се сравнява" in rendered
+
+
+# ── Мандат №50: седмата леща на лицето ───────────────────────────────────────
+
+def test_html_draws_the_seventh_module_bar_and_badge(rendered):
+    """Барът, баджът и цветът идват от config — нищо не е зашито на шест."""
+    assert len(MODULE_WEIGHTS) == 7
+    assert rendered.count('class="mod-label"') == 7
+    assert f'<div class="mod-label">{LENS_NAMES_BG["fiscal"]}</div>' in rendered
+    assert '<span class="lens-badge lens-fiscal">фискал</span>' in rendered
+    assert f'"fiscal": "{LENS_LINE_COLORS["fiscal"]}"' in rendered
+    assert '"fiscal": "Държавни финанси"' in rendered
+
+
+def test_html_methodology_explains_the_fiscal_lens(rendered):
+    """ФОРМА-КАНОН: обяснението стои ПРИ уреда — какво мери, честността, котвите."""
+    assert "<h4>Държавните финанси</h4>" in rendered
+    for token in ("fiscal_balance", "debt", "B9", "плюсът е излишък",
+                  "4-тримесечна плъзгаща", "дрейфа", "Маастрихтските",
+                  "не прагове в скоринга", "единственият домашен макро"):
+        assert token in rendered, token
+
+
+def test_html_fiscal_rows_link_to_the_eurostat_datasets(rendered):
+    for key in ("BG_GOV_BALANCE", "BG_GOV_DEBT"):
+        spec = SERIES_CATALOG[key]
+        assert source_url(spec["source"], spec["id"]) in rendered, key
 
 
 def test_html_explains_the_property_lens_and_its_resolved_polarity(rendered):

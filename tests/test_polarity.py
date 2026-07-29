@@ -125,11 +125,46 @@ def test_is_opt_rejects_the_other_polarity_types():
 
 def test_everything_else_is_plus_one():
     inverted_or_u = {"BG_UNRATE", "BG_LT_RATE", "BG_LENDING_RATE",
-                     "BG_HICP", "BG_HICP_CORE"}
+                     "BG_HICP", "BG_HICP_CORE", "BG_GOV_DEBT"}
     for key in SERIES_CATALOG:
         if key in inverted_or_u or is_opt(polarity_for(key)):
             continue
         assert polarity_for(key) == +1, key
+
+
+# ── Мандат №50: фискалните полярности ────────────────────────────────────────
+
+def test_the_fiscal_polarities_are_pinned():
+    """Салдото +1 (B9: плюсът Е излишъкът) · дългът −1 върху НИВОТО.
+
+    Знаковата конвенция е решението, което най-лесно се обръща мълчаливо: ако
+    някой ден серията се смени с „дефицит като положително число", тестът пада.
+    """
+    assert polarity_for("BG_GOV_BALANCE") == +1
+    assert polarity_for("BG_GOV_DEBT") == -1
+
+
+def test_the_fiscal_series_are_not_optimal_zones():
+    """Фискални АБСОЛЮТНИ котви (Маастрихт) НЕ влизат в скоринга с този мандат.
+
+    Праговете 3% / 60% са контекст за текста; ако утре се промъкнат като OPT
+    зона, и `opt_keys()`, и термометърът щяха да се сменят мълчаливо.
+    """
+    for key in ("BG_GOV_BALANCE", "BG_GOV_DEBT"):
+        assert is_opt(polarity_for(key)) is False, key
+        assert is_u_shaped(polarity_for(key)) is False, key
+    assert "BG_GOV_BALANCE" not in opt_keys()
+    assert "BG_GOV_DEBT" not in opt_keys()
+
+
+def test_the_level_versus_delta_decision_is_declared_at_the_code():
+    """Мандат №50: защо НИВО, а не тримесечна делта — при кода, не само в receipt."""
+    import catalog.polarity as polarity_module
+    from pathlib import Path
+
+    source = Path(polarity_module.__file__).read_text(encoding="utf-8")
+    for token in ("ниво срещу делта", "дрейф", "Маастрихт", "Net lending"):
+        assert token in source, token
 
 
 def test_the_decision_carries_its_data_at_the_decision():

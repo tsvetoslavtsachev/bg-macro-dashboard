@@ -222,6 +222,45 @@ def test_notes_explain_the_new_permits_transform():
     assert "Строителната продукция ОСТАВА +1" in joined
 
 
+# ── Мандат №50: седмата леща (държавни финанси) ──────────────────────────────
+
+def test_fiscal_lens_section_lists_both_series(context):
+    """Седмата леща стига до експорта с двата си крака — потокът и стокът."""
+    text, _, _ = context
+    section = text.split(f"## {LENS_NAMES_BG['fiscal']}")[1].split("\n---\n")[0]
+    for key in ("BG_GOV_BALANCE", "BG_GOV_DEBT"):
+        assert SERIES_CATALOG[key]["name_bg"] in section, key
+
+
+def test_notes_explain_the_budget_balance_mechanics(context):
+    """Анализаторът трябва да знае знака, изглаждането и защо НЕ е сезонно."""
+    joined = " ".join(DATA_QUALITY_NOTES)
+    for token in ("gov_10q_ggnfa", "B9", "плюсът е ИЗЛИШЪК", "s_adj=NSA",
+                  "празни за България", "−4.70"):
+        assert token in joined, token
+
+
+def test_notes_explain_the_debt_level_versus_drift_honesty(context):
+    """Нивото е сред най-ниските в ЕС — уредът мери ДРЕЙФА, не класацията.
+
+    Без тази уговорка скорът 14.2 се чете като „България е задлъжняла", което е
+    точно обратното на истината за абсолютното ниво.
+    """
+    joined = " ".join(DATA_QUALITY_NOTES)
+    for token in ("gov_10q_ggdebt", "НАЙ-НИСКИТЕ нива в ЕС", "ДРЕЙФА",
+                  "Маастрихтските 3% / 60%", "НЕ прагове в скоринга",
+                  "fiscal_balance", "debt"):
+        assert token in joined, token
+
+
+def test_context_declares_the_second_consecutive_composition_change(context):
+    """Втора поредна смяна на състава — казва се, вместо да се крие в делтата."""
+    text, _, _ = context
+    assert "Съставът се смени ОТНОВО с мандат №50" in text
+    assert "Разложи трите" in text
+    assert text.index("мандат №50") < text.index(f"## {LENS_NAMES_BG['growth']}")
+
+
 def test_short_window_series_get_a_note_in_the_export(tmp_path):
     """Флагът от скоринга стига до бележките — не се губи по пътя."""
     idx = pd.date_range(end="2026-06-01", periods=300, freq="MS")

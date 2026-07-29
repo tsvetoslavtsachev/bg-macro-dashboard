@@ -33,29 +33,36 @@ def _mini_catalog():
 
 # ── Тегла ────────────────────────────────────────────────────────────────────
 
-def test_bg_module_weights_are_the_rebalanced_six():
-    """Мандат №43: шестата леща + ребалансът. Инфлацията и растежът остават
-    водещи (0.20), останалите четири са структурни по 0.15."""
+def test_bg_module_weights_are_the_rebalanced_seven():
+    """Мандат №50: седмата леща + ребалансът. Инфлацията и растежът остават
+    водещи (0.20), ПЕТТЕ структурни лещи са равни по 0.12."""
     assert MODULE_WEIGHTS == {
-        "inflation": 0.20, "labor": 0.15, "growth": 0.20,
-        "credit": 0.15, "external": 0.15, "property": 0.15,
+        "inflation": 0.20, "labor": 0.12, "growth": 0.20,
+        "credit": 0.12, "external": 0.12, "property": 0.12, "fiscal": 0.12,
     }
 
 
-def test_module_weights_sum_to_exactly_one():
-    """Точният тест (мандат №43 §А4): сумата е 1.0, не „приблизително“.
+def test_the_five_structural_lenses_carry_equal_weight():
+    """Никоя структурна леща няма повече право на глас от друга (мандат №50)."""
+    structural = ("labor", "credit", "external", "property", "fiscal")
+    assert len({MODULE_WEIGHTS[l] for l in structural}) == 1
+    assert MODULE_WEIGHTS["inflation"] == MODULE_WEIGHTS["growth"] == 0.20
 
-    Ако утре някой добави седма леща, без да отнеме отнякъде, композитът тихо
+
+def test_module_weights_sum_to_exactly_one():
+    """Точният тест (мандат №43 §А4, разширен с №50): сумата е 1.0.
+
+    Ако утре някой добави осма леща, без да отнеме отнякъде, композитът тихо
     ще се пренормализира и числото ще се смени без обяснение — този тест го
     хваща на място.
     """
     assert sum(MODULE_WEIGHTS.values()) == pytest.approx(1.0, abs=1e-12)
-    assert len(MODULE_WEIGHTS) == 6
+    assert len(MODULE_WEIGHTS) == 7
 
 
 def test_composite_is_the_weighted_mean_when_every_lens_is_present():
     scores = {"inflation": 40.0, "labor": 60.0, "growth": 50.0,
-              "credit": 30.0, "external": 20.0, "property": 70.0}
+              "credit": 30.0, "external": 20.0, "property": 70.0, "fiscal": 25.0}
     expected = sum(scores[m] * w for m, w in MODULE_WEIGHTS.items())
     assert compute_composite_score(scores) == pytest.approx(round(expected, 1))
 
@@ -64,14 +71,14 @@ def test_composite_is_the_weighted_mean_when_every_lens_is_present():
 
 def test_empty_lens_drops_out_and_weights_renormalise():
     scores = {"inflation": 40.0, "labor": 60.0, "growth": None,
-              "credit": None, "external": None, "property": None}
-    expected = (40.0 * 0.20 + 60.0 * 0.15) / (0.20 + 0.15)
+              "credit": None, "external": None, "property": None, "fiscal": None}
+    expected = (40.0 * 0.20 + 60.0 * 0.12) / (0.20 + 0.12)
     assert compute_composite_score(scores) == pytest.approx(round(expected, 1))
 
 
 def test_an_empty_property_lens_renormalises_over_the_other_five():
     """Ако Eurostat замълчи и трите имотни серии → лещата ИЗПАДА и композитът
-    се смята върху 0.85, а не с 50 на мястото ѝ (мандат №43 §А4)."""
+    се смята върху останалите тегла, а не с 50 на мястото ѝ (мандат №43 §А4)."""
     five = {"inflation": 34.8, "labor": 67.4, "growth": 47.1,
             "credit": 50.8, "external": 2.3}
     scores = dict(five, property=None)
@@ -79,12 +86,29 @@ def test_an_empty_property_lens_renormalises_over_the_other_five():
     wsum = sum(MODULE_WEIGHTS[l] for l in five)
     expected = sum(five[l] * MODULE_WEIGHTS[l] for l in five) / wsum
 
-    assert wsum == pytest.approx(0.85)
+    assert wsum == pytest.approx(0.76)
+    assert compute_composite_score(scores) == pytest.approx(round(expected, 1))
+
+
+def test_an_empty_fiscal_lens_renormalises_over_the_other_six():
+    """Мандат №50: седмата леща изпада по същото правило като шестата.
+
+    Фискалните серии са тримесечни и ревизионно чувствителни — денят, в който
+    Eurostat замълчи, не бива да дърпа композита към средата с фалшиво „50".
+    """
+    six = {"inflation": 34.8, "labor": 75.8, "growth": 47.1,
+           "credit": 40.8, "external": 2.3, "property": 62.3}
+    scores = dict(six, fiscal=None)
+
+    wsum = sum(MODULE_WEIGHTS[l] for l in six)
+    expected = sum(six[l] * MODULE_WEIGHTS[l] for l in six) / wsum
+
+    assert wsum == pytest.approx(0.88)
     assert compute_composite_score(scores) == pytest.approx(round(expected, 1))
 
 
 def test_property_lens_actually_moves_the_composite():
-    """Шестата леща не е декорация — при 0.15 тегло тя мести числото."""
+    """Шестата леща не е декорация — при 0.12 тегло тя мести числото."""
     five = {"inflation": 34.8, "labor": 67.4, "growth": 47.1,
             "credit": 50.8, "external": 2.3}
     without = compute_composite_score(dict(five, property=None))
@@ -94,9 +118,20 @@ def test_property_lens_actually_moves_the_composite():
     assert with_high > without > with_low
 
 
+def test_fiscal_lens_actually_moves_the_composite():
+    """Седмата леща също не е декорация — ниският ѝ score дърпа надолу."""
+    six = {"inflation": 34.8, "labor": 75.8, "growth": 47.1,
+           "credit": 40.8, "external": 2.3, "property": 62.3}
+    without = compute_composite_score(dict(six, fiscal=None))
+    with_high = compute_composite_score(dict(six, fiscal=80.0))
+    with_low = compute_composite_score(dict(six, fiscal=20.5))
+
+    assert with_high > without > with_low
+
+
 def test_empty_lens_is_not_counted_as_neutral_fifty():
     scores = {"inflation": 40.0, "labor": 60.0, "growth": None,
-              "credit": None, "external": None, "property": None}
+              "credit": None, "external": None, "property": None, "fiscal": None}
     as_neutral = sum(
         (scores[m] if scores[m] is not None else 50.0) * w
         for m, w in MODULE_WEIGHTS.items()
@@ -111,7 +146,7 @@ def test_composite_is_none_when_no_lens_has_data():
 
 def test_nan_lens_score_is_treated_as_missing():
     scores = {"inflation": float("nan"), "labor": 60.0, "growth": None,
-              "credit": None, "external": None, "property": None}
+              "credit": None, "external": None, "property": None, "fiscal": None}
     assert compute_composite_score(scores) == pytest.approx(60.0)
 
 
@@ -273,6 +308,62 @@ def test_lending_cost_is_a_third_leg_not_folded_into_yields():
     zs = {s["key"]: s["health_z"] for s in rep["series"]}
     expected = (zs["Y"] + zs["C"] + zs["L"]) / 3
     assert rep["health_z"] == pytest.approx(round(expected, 3), abs=0.001)
+
+
+# ── Мандат №50: фискалната леща в агрегацията ────────────────────────────────
+
+def _quarterly(values, end="2026-01-01"):
+    idx = pd.date_range(end=end, periods=len(values), freq="QS")
+    return pd.Series([float(v) for v in values], index=idx)
+
+
+def test_fiscal_lens_is_the_mean_of_its_two_peer_groups():
+    """Потокът и стокът гласуват ПООТДЕЛНО — по 1/2 всеки, не като едно число."""
+    catalog = {
+        "B": {"lens": ["fiscal"], "peer_group": "fiscal_balance",
+              "transform": "level", "name_bg": "Салдо", "id": "gov_10q_ggnfa?geo=BG"},
+        "D": {"lens": ["fiscal"], "peer_group": "debt",
+              "transform": "level", "name_bg": "Дълг", "id": "gov_10q_ggdebt?geo=BG"},
+    }
+    snapshot = {
+        "B": _monthly([1.0, 3.0] * 60 + [7.0]),
+        "D": _monthly([1.0, 3.0] * 60 + [6.0]),
+    }
+    rep = compute_lens_reports(catalog, snapshot)["fiscal"]
+
+    assert {pg["name"] for pg in rep["peer_groups"]} == {"fiscal_balance", "debt"}
+    zs = {s["key"]: s["health_z"] for s in rep["series"]}
+    expected = (zs["B"] + zs["D"]) / 2
+    assert rep["health_z"] == pytest.approx(round(expected, 3), abs=0.001)
+
+
+def test_the_budget_balance_is_scored_on_the_four_quarter_rolling_mean():
+    """Аритметичният пин: суровото NSA тримесечие е сезонен трион; скорът чете
+    средното на ПОСЛЕДНИТЕ ЧЕТИРИ тримесечия, не последната дупка."""
+    from core.scorer import score_series
+
+    # Сезонен модел, какъвто е суровият B9: три положителни тримесечия и Q4 дупка.
+    raw = _quarterly([1.0, 2.0, 1.0, -8.0] * 26)
+    res = score_series(raw, transform="roll4q_mean", polarity=+1, name="BG_GOV_BALANCE")
+
+    assert res["value"] == pytest.approx((1.0 + 2.0 + 1.0 - 8.0) / 4)
+    assert res["value"] != pytest.approx(float(raw.iloc[-1]))
+
+
+def test_the_debt_is_scored_on_its_level_and_a_rise_is_unhealthy():
+    """Полярност −1 върху НИВОТО: качване спрямо собствената 10-г. норма сваля
+    score-а. Ако някой обърне знака или мине на делта, тестът пада."""
+    from core.scorer import score_series
+
+    flat = [22.0, 23.0] * 30
+    steady = score_series(_quarterly(flat + [22.5]), transform="level",
+                          polarity=-1, name="BG_GOV_DEBT")
+    risen = score_series(_quarterly(flat + [29.9]), transform="level",
+                         polarity=-1, name="BG_GOV_DEBT")
+
+    assert risen["score"] < steady["score"]
+    assert risen["z_raw"] > 0          # нивото е НАД нормата…
+    assert risen["health_z"] < 0       # …и точно това е нездравото
 
 
 def test_series_entries_carry_the_catalog_metadata():

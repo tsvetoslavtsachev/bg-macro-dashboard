@@ -161,8 +161,9 @@ def test_perceived_reading_is_none_without_data():
 # КАТАЛОГЪТ
 # ═════════════════════════════════════════════════════════════════════════════
 
-def test_catalog_carries_eighteen_series_after_the_context_series():
-    assert len(SERIES_CATALOG) == 18
+def test_catalog_carries_twenty_series_after_the_fiscal_lens():
+    """18 след контекстната серия на М48 + двете фискални серии на М50."""
+    assert len(SERIES_CATALOG) == 20
 
 
 def test_perceived_series_reads_the_ec_survey_balance():
@@ -229,7 +230,7 @@ def _synthetic_snapshot(n: int = 300, seed: int = 11) -> dict:
 def test_the_context_series_does_not_move_a_single_lens_or_the_composite():
     """ГЕЙТЪТ на П3: каталог СЪС и БЕЗ контекстната серия → бит-в-бит равни.
 
-    Не approx — ТОЧНО равенство на композита, на шестте score-а и на шестте z-а.
+    Не approx — ТОЧНО равенство на композита и на ВСЕКИ лещов score/z.
     Контекстът не влиза в никоя леща, затова разликата трябва да е нула ПО
     КОНСТРУКЦИЯ, а не по случайност на закръглението.
     """

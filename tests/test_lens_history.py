@@ -196,6 +196,57 @@ def test_history_carries_the_mandated_columns(live_history):
         assert f"score_{lens}" in live_history.columns
 
 
+# ── Мандат №50: седмата леща минава по СЪЩИЯ път ─────────────────────────────
+
+def test_the_grid_carries_seven_lenses_nothing_is_hardwired_to_six():
+    """Колоните се извеждат от MODULE_WEIGHTS — седмата влиза без пипане тук."""
+    cols = history_columns()
+    assert "z_fiscal" in cols and "score_fiscal" in cols
+    assert len([c for c in cols if c.startswith("z_")]) == len(MODULE_WEIGHTS)
+    assert len([c for c in cols if c.startswith("score_")]) == len(MODULE_WEIGHTS)
+    assert "z_fiscal" in journal_columns() and "score_fiscal" in journal_columns()
+
+
+def test_the_fiscal_lens_reaches_the_reconstructed_grid(live_history):
+    """Двете фискални серии тръгват от 2000 → лещата има данни по ЦЯЛАТА решетка.
+
+    Ако утре някоя от тях изпадне, колоната ще се напълни с празни клетки и
+    този тест ще го каже, вместо `n_lenses` тихо да падне на 6.
+    """
+    assert live_history["score_fiscal"].notna().all()
+    assert live_history["z_fiscal"].notna().all()
+    assert (live_history["n_lenses"] == len(MODULE_WEIGHTS)).all()
+
+
+def test_a_new_lens_column_leaves_the_old_journal_rows_empty_not_zero(
+        reports_and_composite, tmp_path):
+    """Журналната схема е ЧЕСТНА при разширяване: старите редове нямат фискален
+    score и получават ПРАЗНА клетка, не фалшива нула.
+
+    Нулата тук би значела „уредът е мерил държавните финанси и е дал 0" — точно
+    обратното на истината („не е мерил").
+    """
+    import csv
+
+    reports, composite = reports_and_composite
+    path = tmp_path / "journal.csv"
+
+    # Стар ред, роден преди седмата леща: колоните ѝ просто ги няма.
+    old_cols = [c for c in journal_columns() if not c.endswith("_fiscal")]
+    with open(path, "w", encoding="utf-8", newline="") as f:
+        w = csv.writer(f, lineterminator="\n")
+        w.writerow(old_cols)
+        w.writerow(["2026-07-28" if c == "date" else "" for c in old_cols])
+
+    journal = append_journal(reports, composite, today=date(2026, 8, 4), path=path)
+
+    assert list(journal.columns) == journal_columns()
+    assert len(journal) == 2
+    assert pd.isna(journal["score_fiscal"].iloc[0])      # старият ред мълчи
+    assert journal["score_fiscal"].iloc[1] is not None   # новият говори
+    assert not pd.isna(journal["score_fiscal"].iloc[1])
+
+
 def test_every_row_declares_how_much_instrument_stands_behind_it(live_history):
     """`n_series`/`n_lenses` пътуват във всеки ред — ранните точки стъпват на
     по-малко серии и това не бива да се губи."""

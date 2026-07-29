@@ -38,16 +38,16 @@ def test_current_account_is_four_quarter_rolling():
 
 # ── Фаза 3.1: БНБ сериите (мандат №39 §А2) ───────────────────────────────────
 
-def test_catalog_carries_eighteen_series_of_which_seventeen_are_scored():
-    """14 след М42 + трите имотни серии на М43 + контекстната на М48.
+def test_catalog_carries_twenty_series_of_which_nineteen_are_scored():
+    """18 след М48 + двете фискални серии на М50.
 
-    Двете числа се държат ОТДЕЛНО нарочно: каталогът расте на 18, но уредът,
-    който произвежда композита, остава на 17. Ако някой ден контекстна серия
+    Двете числа се държат ОТДЕЛНО нарочно: каталогът расте на 20, но уредът,
+    който произвежда композита, е на 19. Ако някой ден контекстна серия
     се промъкне в леща, второто число ще се смени и тестът ще го каже.
     """
-    assert len(SERIES_CATALOG) == 18
+    assert len(SERIES_CATALOG) == 20
     scored = [k for k, v in SERIES_CATALOG.items() if not v.get("context_only")]
-    assert len(scored) == 17
+    assert len(scored) == 19
     assert all(SERIES_CATALOG[k]["lens"] for k in scored)
 
 
@@ -242,3 +242,61 @@ def test_trade_balance_is_the_goods_and_services_balance():
     assert "bop_gdp6_q" in spec["id"]
     assert "bop_item=GS" in spec["id"]
     assert spec["transform"] == "roll4q_mean"
+
+
+# ── Мандат №50: седмата леща (държавни финанси) ──────────────────────────────
+
+def test_fiscal_lens_is_two_series_in_two_peer_groups():
+    """Потокът и стокът са ДВА въпроса, затова две групи.
+
+    Това НЕ е случаят CA+GS (там едното беше подмножеството-двигател на
+    другото). Салдото пълни дълга с години закъснение — днешната разцепка е
+    точно тази: остър поток при все още нисък сток.
+    """
+    fiscal = {k: v for k, v in SERIES_CATALOG.items() if "fiscal" in v["lens"]}
+    assert set(fiscal) == {"BG_GOV_BALANCE", "BG_GOV_DEBT"}
+    assert {v["peer_group"] for v in fiscal.values()} == {"fiscal_balance", "debt"}
+
+
+def test_fiscal_lens_is_allowed_in_the_catalog_vocabulary():
+    from catalog.series import ALLOWED_LENSES
+
+    assert "fiscal" in ALLOWED_LENSES
+
+
+def test_government_balance_reads_the_b9_net_lending_series_as_a_four_quarter_rolling():
+    """Живо проверено 29.07.2026: SA/SCA са ПРАЗНИ за БГ → сурово NSA.
+
+    Суровото тримесечие е силно сезонно (Q4 дупки), затова прочитът е
+    4-тримесечната плъзгаща — прецедентът е текущата сметка (№37).
+    """
+    spec = SERIES_CATALOG["BG_GOV_BALANCE"]
+    assert spec["source"] == "eurostat"
+    assert "gov_10q_ggnfa" in spec["id"]
+    assert "na_item=B9" in spec["id"]
+    assert "sector=S13" in spec["id"]
+    assert "unit=PC_GDP" in spec["id"]
+    assert "s_adj=NSA" in spec["id"], "SA/SCA са празни за БГ — четем сурово"
+    assert spec["transform"] == "roll4q_mean"
+    assert spec["is_rate"] is True
+    assert spec["release_schedule"] == "quarterly"
+    assert "4-тримесечна плъзгаща" in spec["name_bg"]
+
+
+def test_government_debt_is_read_as_a_level_not_as_a_change():
+    """Решението „ниво срещу делта" (мандат №50): робастният z спрямо плъзгащата
+    10-годишна медиана ВЕЧЕ мери дрейфа — делтата отгоре би добавила само шум."""
+    spec = SERIES_CATALOG["BG_GOV_DEBT"]
+    assert spec["source"] == "eurostat"
+    assert "gov_10q_ggdebt" in spec["id"]
+    assert "na_item=GD" in spec["id"]
+    assert "unit=PC_GDP" in spec["id"]
+    assert spec["transform"] == "level"
+    assert spec["transform"] != "first_diff"
+    assert spec["is_rate"] is True
+
+
+def test_the_fiscal_series_carry_the_lever_and_the_drift_in_their_hints():
+    """Числото пътува с изречението си: единственият домашен лост · дрейфът."""
+    assert "лост" in SERIES_CATALOG["BG_GOV_BALANCE"]["narrative_hint"]
+    assert "ДРЕЙФА" in SERIES_CATALOG["BG_GOV_DEBT"]["narrative_hint"]

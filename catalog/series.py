@@ -10,7 +10,8 @@ from typing import Any
 
 ALLOWED_SOURCES = {"eurostat", "ecb", "nsi", "bnb", "derived"}
 ALLOWED_REGIONS = {"BG", "EU"}
-ALLOWED_LENSES = {"labor", "inflation", "growth", "credit", "external", "property"}
+ALLOWED_LENSES = {"labor", "inflation", "growth", "credit", "external", "property",
+                  "fiscal"}
 ALLOWED_TRANSFORMS = {"level", "yoy_pct", "mom_pct", "qoq_pct", "z_score",
                       "first_diff", "roll4q_mean", "yoy_roll4"}
 ALLOWED_SCORING_MODES = {"level", "momentum"}
@@ -423,6 +424,62 @@ SERIES_CATALOG: dict[str, dict[str, Any]] = {
         "narrative_hint": "Водещият индикатор на строителния цикъл — какво влиза "
                           "в тръбата днес, за да излезе като предлагане след "
                           "година-две.",
+    },
+
+    # ════════════════════════════════════════════════════════
+    # FISCAL — държавни финанси (мандат №50)
+    # ════════════════════════════════════════════════════════
+    # Седмата леща. Двата крака са ДВА РАЗЛИЧНИ въпроса, затова са две отделни
+    # peer-групи, не един „фискален“ сигнал:
+    #   `fiscal_balance` — ПОТОКЪТ: колко се харчи над приходите тази година
+    #   `debt`           — СТОКЪТ: колко е натрупано като дял от икономиката
+    # Днешната разцепка е точно тази: остър поток (−4.7% от БВП) при все още
+    # нисък сток (28.5%). Не е случаят CA+GS (там едното беше подмножеството-
+    # двигател на другото) — тук потокът пълни стока с години закъснение.
+    #
+    # Живо проверени Eurostat заявки (29.07.2026 — не се преоткриват):
+    # `gov_10q_ggnfa` носи B9 = „Net lending (+) / net borrowing (−)“, т.е.
+    # знакът е ПЛЮС при излишък; сезонно и календарно изгладените варианти
+    # (SA/SCA) са ПРАЗНИ за България, затова четем сурово NSA. Суровото
+    # тримесечие е силно сезонно (Q4 дупки от −10% и повече) → 4-тримесечна
+    # плъзгаща по прецедента на текущата сметка (`roll4q_mean`, от №37).
+    "BG_GOV_BALANCE": {
+        "source": "eurostat",
+        "id": "gov_10q_ggnfa?geo=BG&unit=PC_GDP&s_adj=NSA&sector=S13&na_item=B9",
+        "region": "BG",
+        "name_bg": "Бюджетно салдо (% от БВП, 4-тримесечна плъзгаща)",
+        "name_en": "General Government Net Lending/Borrowing to GDP (4Q rolling)",
+        "lens": ["fiscal"],
+        "peer_group": "fiscal_balance",
+        "tags": ["headline"],
+        "transform": "roll4q_mean",
+        "is_rate": True,
+        "historical_start": "2000-01-01",
+        "release_schedule": "quarterly",
+        "typical_release": "end_quarter",
+        "revision_prone": True,
+        "narrative_hint": "Фискалният лост е ЕДИНСТВЕНИЯТ домашен макро лост — "
+                          "България няма собствена лихвена политика. Салдото е "
+                          "потокът, който пълни или свива дълга.",
+    },
+    "BG_GOV_DEBT": {
+        "source": "eurostat",
+        "id": "gov_10q_ggdebt?geo=BG&na_item=GD&sector=S13&unit=PC_GDP",
+        "region": "BG",
+        "name_bg": "Държавен дълг (% от БВП)",
+        "name_en": "General Government Consolidated Gross Debt to GDP",
+        "lens": ["fiscal"],
+        "peer_group": "debt",
+        "tags": [],
+        "transform": "level",
+        "is_rate": True,
+        "historical_start": "2000-01-01",
+        "release_schedule": "quarterly",
+        "typical_release": "end_quarter",
+        "revision_prone": True,
+        "narrative_hint": "Нивото е сред най-ниските в ЕС, но скорът мери "
+                          "ДРЕЙФА спрямо собствената 10-годишна норма — "
+                          "качването с 6пп за година е сигналът, не класацията.",
     },
 }
 
