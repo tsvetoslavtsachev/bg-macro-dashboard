@@ -53,15 +53,18 @@ def live_context(tmp_path_factory):
     from analysis.tension import annihilation
     from catalog.series import series_by_source
     from sources import build_adapters
+    from sources.derived import derive_series
     from sources.manual_seed import splice_loans
 
     snapshot = {}
     for source_name, adapter in build_adapters().items():
         keys = [spec["_key"] for spec in series_by_source(source_name)]
         snapshot.update(adapter.get_snapshot(keys))
+    # Живата верига (мандат №54): splice → derive. Проверката за пълнота е СЛЕД
+    # нея — изведената серия не идва от адаптер.
+    snapshot = derive_series(splice_loans(snapshot))
     if len(snapshot) < len(SERIES_CATALOG):
         pytest.skip("кешът в data/ е непълен — тестът иска комитнатия кеш")
-    snapshot = splice_loans(snapshot)
 
     reports = compute_lens_reports(SERIES_CATALOG, snapshot)
     composite = compute_composite_score({l: r["score"] for l, r in reports.items()})
@@ -92,12 +95,18 @@ def test_the_live_context_stays_compact_like_the_china_model(live_context):
     (чекър-фикс при проверяващия: изпълнителят имаше забрана да пипа тавана).
     Дупката от №50 („тестът мери фикстура, живият файл не се пази") е ЗАТВОРЕНА
     с чип-билета на Ц. 29.07.2026: мери се ЖИВИЯТ състав — комитнатият кеш +
-    всички живи секции, 1:1 по `run.py::cmd_export_context`; живият файл на
-    29.07 (№51 тензията + №52 каталога) е ~35 300 байта → таван 40 000. Духът
-    е СЪЩИЯТ: тревога, не бюджет — числото е там, за да ГРЪМНЕ при следващото
-    сериозно раздуване, а не да се вдига по навик.
+    всички живи секции, 1:1 по `run.py::cmd_export_context`.
+
+    ⚠ Мандат №54 вдига тавана 40 000 → **46 000** и КАЗВА защо, вместо да го
+    вдигне по навик: живият файл ПРЕДИ мандата вече беше **38 144** байта (не
+    35 300 — №53 добави провенанса на балонната двойка и старият коментар
+    остана назад), а мандатът добавя **+4 725**: живия блок „Двете хипотези"
+    под имотната леща и пренаписаната бележка за конвенцията и ревизията.
+    Живото след №54 е **42 869** байта. Духът е СЪЩИЯТ: тревога, не бюджет —
+    числото е там, за да ГРЪМНЕ при следващата НОВА секция, не при седмичната
+    порция числа.
     """
-    assert len(live_context.encode("utf-8")) < 40_000
+    assert len(live_context.encode("utf-8")) < 46_000
 
 
 def test_context_carries_every_lens(context):

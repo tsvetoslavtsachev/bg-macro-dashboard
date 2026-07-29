@@ -16,6 +16,7 @@ Public API:
     inflation_anchor(value)              → котвеният прочит: пп от целта + зона
     perceived_inflation_reading(series)  → усещаната инфлация + епохалният ѝ контекст
     inflation_voices(snapshot)           → двата гласа, готови за двете повърхности
+    housing_hypotheses(snapshot)         → двете хипотези за жилищния бум, с ЖИВИ числа
 """
 from __future__ import annotations
 
@@ -71,8 +72,18 @@ def ecb_series_url(catalog_id: str) -> str:
 
 
 def source_url(source: str, catalog_id: str) -> str:
-    """Линкът на серията се разклонява по източник — един вход за дисплея."""
-    if (source or "").strip().lower() == "ecb":
+    """Линкът на серията се разклонява по източник — един вход за дисплея.
+
+    ИЗВЕДЕНАТА серия (`source: "derived"`, мандат №54) няма собствен
+    първоизточник — нейното „id" е РЕЦЕПТА, не адрес. Затова тук се връща
+    празен низ и лицето я показва без линк: по-добре без линк, отколкото с
+    линк, който сочи някъде, откъдето числото не идва. Съставките ѝ си имат
+    свои редове със свои линкове.
+    """
+    src = (source or "").strip().lower()
+    if src == "derived":
+        return ""
+    if src == "ecb":
         return ecb_series_url(catalog_id)
     return databrowser_url(catalog_id)
 
@@ -379,4 +390,363 @@ def inflation_voices(
         "anchors": anchors,
         "perceived": perceived,
         "disclaimer": ANCHOR_DISCLAIMER,
+    }
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# ДВЕТЕ ХИПОТЕЗИ ЗА КРЕДИТНО-ЖИЛИЩНИЯ БУМ — ЖИВИ (мандат №54)
+# ═════════════════════════════════════════════════════════════════════════════
+# До №54 блокът беше ръчна снимка с дата: числата се преписваха на две
+# повърхности (методологията и context експортът) и остаряваха мълчаливо, а
+# едно от тях се оказа сдвоило най-свеж кредитен сток с по-стар БВП. Сега
+# кредитната страна е ЖИВ дериват (`BG_CREDIT_GDP_HH`), а този блок е ЕДИНИЯТ
+# източник, който двете повърхности ЦИТИРАТ — прецедентът е `inflation_voices`.
+#
+# Забраната остава кодирана: нито едно изречение тук не отсъжда коя хипотеза е
+# вярната. Уредът вижда съвпадението, не причината.
+
+HOUSING_RATIO_KEY = "BG_CREDIT_GDP_HH"
+HOUSING_CREDIT_KEY = "BG_LOANS_HH"
+HOUSING_NGDP_KEY = "BG_NGDP"
+HOUSING_RENTS_KEY = "BG_RENTS"
+
+# Реперът „преди голямата криза": последното тримесечие на 2008 — моментът,
+# с който се сравнява днешното ниво.
+PRE_CRISIS_QUARTER = "2008-10-01"
+# Котвата на темпа: дъното на сегашната вълна (краят на 2022).
+PACE_ANCHOR_QUARTER = "2022-10-01"
+# Прозорецът, в който „връх" значи и „свит знаменател": рецесията 2009-10 сви
+# БВП, а кредитният сток не се сви със същия темп — съотношението скочи, без
+# някой да е взел нов заем. Върхът вътре в прозореца пътува с тази уговорка.
+CRISIS_DENOMINATOR_WINDOW = ("2008-07-01", "2010-12-31")
+CRISIS_DENOMINATOR_NOTE = (
+    "свит знаменател в кризата 2009-10: съотношението скочи без нов кредит"
+)
+# Спокойната епоха, спрямо която се чете наемният темп.
+CALM_EPOCH = ("2015-01-01", "2019-12-31")
+
+# ── РЪЧНАТА СНИМКА, която №54 НЕ дерайва ─────────────────────────────────────
+# Заместващата хипотеза стъпва на съотношението „компенсации срещу цени на
+# жилищата" от 2015 насам. То е ръчна сверка с ДАТА (мандат №51) и остава
+# такова нарочно: №54 дерайва само кредитната страна. Литералите стоят ТУК,
+# с етикета си, вместо да се преписват на две повърхности.
+SUBSTITUTION_SNAPSHOT = {
+    "as_of": "29.07.2026",
+    "since_year": 2015,
+    "compensation_pct": 213,
+    "hpi_pct": 176,
+    "caveat": "агрегатна МАСА, не заплата на човек",
+}
+
+# Историческият урок, който пътува с ливъриджната хипотеза.
+LEVERAGE_LESSON = (
+    "Мотивът на купувача не е защитата: и owner-occupier бум с реални доходи "
+    "(Ирландия 2005-07) завършва зле — уязвимостта е ливъриджът на новите "
+    "ценови нива."
+)
+
+# Изречението, което пази равностойността. Формулировката е нарочно без думата
+# „победител" — уредът не участва в състезание, той просто не отсъжда.
+HOUSING_EQUIVALENCE = (
+    "Двете четения стоят РАВНОСТОЙНО: уредът вижда СЪВПАДЕНИЕТО (цената на "
+    "актива и кредитът се движат заедно), но не отсъжда коя от двете е "
+    "причината. Нито една не е установена."
+)
+
+
+def _quarter_label(ts) -> str:
+    """`2009-10-01` → „2009Q4" — тримесечието както се говори."""
+    return str(pd.Timestamp(ts).to_period("Q"))
+
+
+def _at(series: pd.Series, when: str) -> Optional[float]:
+    """Стойността на точна дата, или None — без интерполация и без съседи."""
+    try:
+        ts = pd.Timestamp(when)
+    except Exception:
+        return None
+    if ts not in series.index:
+        return None
+    return float(series.loc[ts])
+
+
+def credit_gdp_reading(series: Optional[pd.Series]) -> Optional[dict]:
+    """Кредит/БВП: къде сме, къде е върхът, откога и с какъв темп се качва.
+
+    Всяко число идва от самата серия. „Върхът" е МАКСИМУМЪТ на историята ѝ, не
+    прозорец по вкус — ако утре днешната точка го надмине, изречението се сменя
+    само (`peak_is_now`).
+    """
+    if series is None or len(series) == 0:
+        return None
+    s = series.dropna()
+    if s.empty or not isinstance(s.index, pd.DatetimeIndex):
+        return None
+
+    value = float(s.iloc[-1])
+    last_ts = s.index[-1]
+    peak_ts = s.idxmax()
+    peak = float(s.loc[peak_ts])
+    peak_is_now = peak_ts == last_ts
+
+    lo, hi = CRISIS_DENOMINATOR_WINDOW
+    peak_in_crisis = pd.Timestamp(lo) <= peak_ts <= pd.Timestamp(hi)
+
+    pre_crisis = _at(s, PRE_CRISIS_QUARTER)
+    pace_from = _at(s, PACE_ANCHOR_QUARTER)
+    pace = None
+    if pace_from is not None:
+        years = (last_ts - pd.Timestamp(PACE_ANCHOR_QUARTER)).days / 365.25
+        if years > 0:
+            pace = round((value - pace_from) / years, 1)
+
+    parts = [f"Кредит домакинства/БВП: {value:.1f}% ({_quarter_label(last_ts)})"]
+    if peak_is_now:
+        parts.append(" — това е най-високото в историята на серията")
+    else:
+        where = "под" if value < peak else "над"
+        parts.append(
+            f" — {where} цикличния връх {peak:.1f}% "
+            f"({_quarter_label(peak_ts)})"
+        )
+        if peak_in_crisis:
+            parts.append(f" [{CRISIS_DENOMINATOR_NOTE}]")
+    if pre_crisis is not None:
+        diff = value - pre_crisis
+        rel = "около" if abs(diff) < 1.0 else ("над" if diff > 0 else "под")
+        parts.append(
+            f"; {rel} нивото от {_quarter_label(PRE_CRISIS_QUARTER)} "
+            f"({pre_crisis:.1f}%)"
+        )
+    if pace is not None and pace_from is not None:
+        parts.append(
+            f"; темп {pace:+.1f} пп/год. от {_quarter_label(PACE_ANCHOR_QUARTER)} "
+            f"({pace_from:.1f}%)"
+        )
+    parts.append(".")
+
+    return {
+        "key": HOUSING_RATIO_KEY,
+        "value": round(value, 1),
+        "last_date": _quarter_label(last_ts),
+        "n": int(len(s)),
+        "peak_value": round(peak, 1),
+        "peak_date": _quarter_label(peak_ts),
+        "peak_is_now": bool(peak_is_now),
+        "peak_in_crisis": bool(peak_in_crisis),
+        "peak_note": CRISIS_DENOMINATOR_NOTE if peak_in_crisis else "",
+        "pre_crisis_value": None if pre_crisis is None else round(pre_crisis, 1),
+        "pre_crisis_date": _quarter_label(PRE_CRISIS_QUARTER),
+        "pace_pp_per_year": pace,
+        "pace_from_value": None if pace_from is None else round(pace_from, 1),
+        "pace_from_date": _quarter_label(PACE_ANCHOR_QUARTER),
+        "sentence": "".join(parts),
+    }
+
+
+def credit_gdp_gap(
+    snapshot: dict, catalog: Optional[dict] = None
+) -> Optional[dict]:
+    """Разривът „кредитен ръст − номинален ръст" — в ПОКАЗВАНИТЕ числа.
+
+    Двете страни се четат след каталожната си трансформация, за да е разривът
+    точно разликата на двете числа, които стоят на таблото. Иначе експортът би
+    твърдял разлика, която читателят не може да сметне сам.
+    """
+    catalog = SERIES_CATALOG if catalog is None else catalog
+    spec_credit, spec_ngdp = catalog.get(HOUSING_CREDIT_KEY), catalog.get(HOUSING_NGDP_KEY)
+    if not spec_credit or not spec_ngdp:
+        return None
+
+    credit = _last_transformed(snapshot, HOUSING_CREDIT_KEY, spec_credit)
+    ngdp = _last_transformed(snapshot, HOUSING_NGDP_KEY, spec_ngdp)
+    if credit.empty or ngdp.empty:
+        return None
+
+    # Разривът се смята от ПОКАЗВАНИТЕ (закръглени) числа, не от суровите:
+    # иначе експортът би твърдял разлика, която читателят не може да сметне
+    # сам от двете числа пред очите си.
+    c_val = round(float(credit.iloc[-1]), 1)
+    g_val = round(float(ngdp.iloc[-1]), 1)
+    gap = round(c_val - g_val, 1)
+    return {
+        "credit_yoy": c_val,
+        "credit_date": _quarter_label(credit.index[-1]),
+        "ngdp_yoy": g_val,
+        "ngdp_date": _quarter_label(ngdp.index[-1]),
+        "gap_pp": gap,
+        "sentence": (
+            f"Разрив „кредит домакинства − номинален БВП“: {c_val:.1f}% г/г "
+            f"({_quarter_label(credit.index[-1])}) срещу {g_val:.1f}% г/г "
+            f"({_quarter_label(ngdp.index[-1])}) = {gap:+.1f} пп."
+        ),
+    }
+
+
+def rents_reading(
+    snapshot: dict, catalog: Optional[dict] = None
+) -> Optional[dict]:
+    """Наемите срещу спокойната си норма — дискриминаторът на заместващата.
+
+    Медианата на спокойната епоха се СМЯТА от серията; „кратно над" се твърди
+    само когато числата го дават.
+    """
+    catalog = SERIES_CATALOG if catalog is None else catalog
+    spec = catalog.get(HOUSING_RENTS_KEY)
+    if not spec:
+        return None
+    s = _last_transformed(snapshot, HOUSING_RENTS_KEY, spec)
+    if s.empty:
+        return None
+
+    value = float(s.iloc[-1])
+    lo, hi = CALM_EPOCH
+    calm = s[(s.index >= pd.Timestamp(lo)) & (s.index <= pd.Timestamp(hi))]
+    calm_median = round(float(calm.median()), 1) if len(calm) else None
+    label = crisis_epoch_label(lo, hi)
+    cooling = calm_median is not None and value <= calm_median
+
+    reading = f"наемите растат с {value:.1f}% г/г"
+    if calm_median is not None:
+        reading += f" при медиана {calm_median:.1f}% за {label}"
+    parts = [reading[0].upper() + reading[1:]]
+    if calm_median is not None:
+        parts.append(" — наемният пазар НЕ се охлажда" if not cooling
+                     else " — наемният пазар се охлажда")
+    parts.append(".")
+
+    return {
+        "key": HOUSING_RENTS_KEY,
+        "value": round(value, 1),
+        "reading": reading,
+        "last_date": (
+            s.index[-1].strftime("%Y-%m")
+            if isinstance(s.index, pd.DatetimeIndex) else str(s.index[-1])
+        ),
+        "calm_median": calm_median,
+        "calm_label": label,
+        "cooling": bool(cooling),
+        "sentence": "".join(parts),
+    }
+
+
+def _substitution_hypothesis(rents: Optional[dict]) -> dict:
+    """Заместващата: доходите изместват наема с покупка."""
+    snap = SUBSTITUTION_SNAPSHOT
+    claim = (
+        f"растящите доходи изместват наема с покупка, т.е. търсенето е "
+        f"потребителско, а не спекулативно — компенсацията на наетите е "
+        f"+{snap['compensation_pct']}% срещу +{snap['hpi_pct']}% на цените на "
+        f"жилищата от {snap['since_year']} насам "
+        f"(ръчна сверка към {snap['as_of']}; {snap['caveat']})."
+    )
+    falsifier = (
+        "Пада, ако наемният пазар не се охлажда: бягство от наема би свило "
+        "наемното търсене."
+    )
+    if rents:
+        falsifier += f" Живо: {rents['reading']}"
+        falsifier += (
+            " — условието тегли СРЕЩУ нея."
+            if not rents["cooling"] else
+            " — условието е в нейна полза."
+        )
+    return {
+        "key": "substitution",
+        "name": "заместващата",
+        "is_live": False,
+        "claim": claim,
+        "sentence": f"Заместващата: {claim}",
+        "falsifier": falsifier,
+    }
+
+
+def _leverage_hypothesis(
+    ratio: Optional[dict], gap: Optional[dict]
+) -> dict:
+    """Ливъриджната: цените се качват на кредит."""
+    claim = "цените се качват на кредит."
+    if ratio:
+        claim += f" {ratio['sentence']}"
+    if gap:
+        claim += f" {gap['sentence']}"
+
+    falsifier = (
+        "Пада, ако съотношението кредит/БВП спре да се качва и разривът спрямо "
+        "номиналния ръст се затвори."
+    )
+    live = []
+    if ratio and ratio.get("pace_pp_per_year") is not None:
+        live.append(f"темпът е {ratio['pace_pp_per_year']:+.1f} пп/год.")
+    if gap:
+        live.append(f"разривът е {gap['gap_pp']:+.1f} пп")
+    if live:
+        rising = bool(ratio and (ratio.get("pace_pp_per_year") or 0) > 0)
+        widening = bool(gap and gap["gap_pp"] > 0)
+        state = ("нито едното не е налице" if (rising and widening)
+                 else "условието е частично налице" if (rising or widening)
+                 else "условието е налице")
+        falsifier += f" Живо: {' и '.join(live)} — {state}."
+    return {
+        "key": "leverage",
+        "name": "ливъриджната",
+        "is_live": True,
+        "claim": claim,
+        "sentence": f"Ливъриджната: {claim}",
+        "falsifier": falsifier,
+        "lesson": LEVERAGE_LESSON,
+    }
+
+
+def _revision_note(ratio: Optional[dict]) -> str:
+    """Честната ревизия (мандат №54 §0б) — неутрално, с живото число.
+
+    Класът на грешката се именува, не се крие: ръчната сверка сдвояваше
+    най-свежия кредитен сток с по-стар БВП. Живата серия го прави невъзможно,
+    защото ражда тримесечие само когато и двете страни са налични.
+    """
+    note = (
+        "Ревизия (мандат №54, 29.07.2026): кредитната страна вече е ЖИВ дериват "
+        "на тримесечно изравнена конвенция и замества ръчната сверка отпреди "
+        "нея. Ръчната сверка е сдвоявала най-свежия кредитен сток с по-стар БВП "
+        "и е давала по-високо ниво и по-бърз темп; живата серия ражда "
+        "тримесечие само когато и двете страни са налични."
+    )
+    if ratio and not ratio["peak_is_now"] and ratio["value"] < ratio["peak_value"]:
+        note += (
+            f" Следствие за разказа: ливъриджната хипотеза губи най-острата си "
+            f"реплика — днешните {ratio['value']:.1f}% са ПОД цикличния връх "
+            f"{ratio['peak_value']:.1f}% ({ratio['peak_date']}), не над него — "
+            f"но пази посоката."
+        )
+    return note
+
+
+def housing_hypotheses(
+    snapshot: dict, catalog: Optional[dict] = None
+) -> dict:
+    """Двете хипотези за кредитно-жилищния бум, готови за ДВЕТЕ повърхности.
+
+    Връща `{"ratio", "gap", "rents", "hypotheses", "revision", "equivalence",
+    "available"}`. Методологичната страница и `briefing_context` ЦИТИРАТ оттук
+    (ФОРМА-КАНОН: един източник), затова не могат да се разминат по число или
+    по формулировка.
+    """
+    catalog = SERIES_CATALOG if catalog is None else catalog
+
+    ratio = credit_gdp_reading((snapshot or {}).get(HOUSING_RATIO_KEY))
+    gap = credit_gdp_gap(snapshot or {}, catalog)
+    rents = rents_reading(snapshot or {}, catalog)
+
+    return {
+        "available": bool(ratio or gap or rents),
+        "ratio": ratio,
+        "gap": gap,
+        "rents": rents,
+        "hypotheses": [
+            _substitution_hypothesis(rents),
+            _leverage_hypothesis(ratio, gap),
+        ],
+        "revision": _revision_note(ratio),
+        "equivalence": HOUSING_EQUIVALENCE,
     }

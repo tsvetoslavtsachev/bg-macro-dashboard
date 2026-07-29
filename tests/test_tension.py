@@ -46,6 +46,7 @@ from catalog.series import SERIES_CATALOG, series_by_source, validate_catalog
 from config import MODULE_WEIGHTS
 from core.scorer import compute_composite_score, compute_lens_reports
 from sources import build_adapters
+from sources.derived import derive_series
 from sources.manual_seed import splice_loans
 
 RENTS = "BG_RENTS"
@@ -211,13 +212,16 @@ def test_the_six_to_seven_declaration_is_one_source_and_says_what_it_must():
 
 @pytest.fixture(scope="module")
 def cache_snapshot():
+    # Същият път като живия (мандат №54): fetch → splice → derive. Изведената
+    # серия НЕ идва от адаптер, затова проверката за пълнота е СЛЕД деривацията.
     snapshot = {}
     for source_name, adapter in build_adapters().items():
         keys = [spec["_key"] for spec in series_by_source(source_name)]
         snapshot.update(adapter.get_snapshot(keys))
+    snapshot = derive_series(splice_loans(snapshot))
     if len(snapshot) < len(SERIES_CATALOG):
         pytest.skip("кешът в data/ е непълен — тестът иска комитнатия кеш")
-    return splice_loans(snapshot)
+    return snapshot
 
 
 @pytest.fixture(scope="module")
@@ -407,11 +411,18 @@ def test_the_reconstructed_composite_is_untouched_by_the_rents_series():
 # КАТАЛОГЪТ — наемите като ВТОРА контекстна серия
 # ═════════════════════════════════════════════════════════════════════════════
 
-def test_catalog_carries_twenty_one_series_of_which_two_are_context():
-    """20 след М50 + наемите на М51; уредът, който произвежда композита, е 19."""
-    assert len(SERIES_CATALOG) == 21
+def test_catalog_carries_twenty_three_series_of_which_four_are_context():
+    """21 след М51 + двете на М54; уредът, който произвежда композита, е 19.
+
+    Пълният контекст-гейт (бит-в-бит, за ВСЯКА контекстна серия) живее
+    параметризиран в `test_catalog.py` от мандат №54 — тук остава броячът и
+    огледалният пин за наемите, който роди прецедента.
+    """
+    assert len(SERIES_CATALOG) == 23
     context = [k for k, v in SERIES_CATALOG.items() if v.get("context_only")]
-    assert sorted(context) == ["BG_INFL_PERCEIVED", "BG_RENTS"]
+    assert sorted(context) == [
+        "BG_CREDIT_GDP_HH", "BG_INFL_PERCEIVED", "BG_NGDP", "BG_RENTS"
+    ]
     scored = [k for k, v in SERIES_CATALOG.items() if not v.get("context_only")]
     assert len(scored) == 19
     assert validate_catalog() == []
@@ -488,16 +499,19 @@ def test_the_tension_row_tooltip_carries_the_receipt_and_the_declaration(rendere
 
 
 @pytest.fixture(scope="module")
-def methodology(live_history, tmp_path_factory):
+def methodology(cache_snapshot, live_history, tmp_path_factory):
     """Методологичната страница, както я строи `run.py --briefing` (мандат №52).
 
     Тензионните обяснения слязоха от лицето на собствената си страница —
-    асерциите ги следват там, вместо да изчезнат.
+    асерциите ги следват там, вместо да изчезнат. От мандат №54 страницата
+    получава и ЖИВИЯ хипотезен блок, точно както в `run.py`.
     """
+    from core.display import housing_hypotheses
     from export.methodology import generate_methodology
 
     out = tmp_path_factory.mktemp("methodology") / "methodology.html"
-    generate_methodology(str(out), history=live_history)
+    generate_methodology(str(out), history=live_history,
+                         housing=housing_hypotheses(cache_snapshot))
     return out.read_text(encoding="utf-8")
 
 
@@ -508,13 +522,30 @@ def test_methodology_explains_the_tension_layer(methodology):
         assert token in methodology, token
 
 
-def test_methodology_carries_both_housing_hypotheses_without_a_winner(methodology):
-    """Двете пътеки стоят РАВНОСТОЙНО — с числа, с фалсификатори, без победител."""
-    for token in ("две живи хипотези", "заместващата", "ливъриджната",
-                  "+213%", "+176%", "26.3%", "24.6%", "+9пп",
-                  "Фалсификаторите", "Ирландия 2005-07", "29.07.2026"):
+def test_methodology_carries_both_housing_hypotheses_without_a_winner(
+        methodology, cache_snapshot):
+    """Двете пътеки стоят РАВНОСТОЙНО — с числа, с фалсификатори, без присъда.
+
+    ⚠ Мандат №54: числовите токен-пинове („26.3%", „24.6%", „+9пп") ПАДАТ —
+    кредитната страна вече е ЖИВА и се сменя всяко тримесечие. На тяхно място
+    стои СТРУКТУРЕН пин: страницата носи ТОЧНО живото число на серията и
+    ТОЧНО изречението на блока. Ръчната снимка (компенсации срещу HPI) остава
+    пинната като литерал — тя наистина е снимка.
+    """
+    import html as _html
+
+    from core.display import housing_hypotheses
+
+    h = housing_hypotheses(cache_snapshot)
+    for token in ("две живи хипотези", "Заместващата", "Ливъриджната",
+                  "+213%", "+176%", "Фалсификаторите", "Ирландия 2005-07",
+                  "29.07.2026", "ИЗВЕДЕНА".lower()):
         assert token in methodology, token
-    for forbidden in ("хипотезата е потвърдена", "доказва, че", "установено е"):
+    assert f"{h['ratio']['value']:.1f}%" in methodology
+    assert f"{h['ratio']['peak_value']:.1f}%" in methodology
+    assert _html.escape(h["equivalence"]) in methodology
+    for forbidden in ("хипотезата е потвърдена", "доказва, че", "установено е",
+                      "проби върха", "26.3% сега"):
         assert forbidden not in methodology, forbidden
 
 
@@ -590,13 +621,21 @@ def test_the_notes_carry_the_tension_the_hypotheses_and_the_rents():
     from export.briefing_context import DATA_QUALITY_NOTES
 
     joined = " ".join(DATA_QUALITY_NOTES)
+    # ⚠ Мандат №54: числовите токен-пинове на №51 („26.3%", „24.6%", „+9пп",
+    # „Снимка към 29.07.2026") ПАДАТ оттук — кредитните числа вече не живеят в
+    # бележката, а в живия блок под имотната леща. Бележката се съди по това,
+    # което ѝ остава: конвенцията, ревизията и препратката. Живите числа имат
+    # свой структурен пин в `test_derived.py`.
     for token in ("К1 „Погасяването“", "лъжливото средно, не кризата",
                   "6-лещовата", "7-лещовия", "н.д.",
-                  "РАВНОСТОЙНИ", "+213%", "+176%", "26.3%", "24.6%", "+9пп",
-                  "Фалсификатори", "не обявявай победител", "29.07.2026",
+                  "РАВНОСТОЙНИ", "не обявявай победител", "29.07.2026",
                   "BG_RENTS", "coicop18=CP041", "prc_hicp_midx", "n=343",
-                  "context_only"):
+                  "context_only",
+                  "BG_CREDIT_GDP_HH", "BG_NGDP", "ИЗВЕДЕНА",
+                  "4-тримесечната СУМА", "цитирай ОТТАМ"):
         assert token in joined, token
+    for retired in ("26.3%", "24.6%", "+9пп", "проби върха"):
+        assert retired not in joined, retired
 
 
 def test_the_module_declares_its_semantics_in_the_docstring():

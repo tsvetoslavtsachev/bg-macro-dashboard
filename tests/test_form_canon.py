@@ -49,13 +49,22 @@ def test_databrowser_url_uses_the_dataset_before_the_query():
 
 
 def test_every_catalog_series_yields_a_first_source_url():
-    """Всяко име води към ПЪРВОИЗТОЧНИКА си — Eurostat или ЕЦБ, не смес."""
+    """Всяко ФЕТЧВАНО име води към ПЪРВОИЗТОЧНИКА си — Eurostat или ЕЦБ.
+
+    ⚠ Мандат №54: ИЗВЕДЕНАТА серия няма първоизточник — нейното „id" е рецепта,
+    не адрес. За нея канонът се спазва ОБРАТНО: липсващ линк е по-честен от
+    линк, който сочи някъде, откъдето числото не идва. Съставките ѝ имат свои
+    редове със свои линкове (отделен тест в `test_catalog.py`).
+    """
     expected_prefix = {
         "eurostat": "https://ec.europa.eu/eurostat/databrowser/view/",
         "ecb": "https://data.ecb.europa.eu/data/datasets/",
     }
     for key, spec in SERIES_CATALOG.items():
         source = spec["source"]
+        if source == "derived":
+            assert source_url(source, spec["id"]) == "", key
+            continue
         assert source in expected_prefix, key
         url = source_url(source, spec["id"])
         assert url.startswith(expected_prefix[source]), key
@@ -211,8 +220,11 @@ def rendered(tmp_path):
 
 
 def test_html_links_every_indicator_name_to_the_source(rendered):
-    for spec in SERIES_CATALOG.values():
-        assert source_url(spec["source"], spec["id"]) in rendered
+    """Изведената серия няма адрес → няма и линк (мандат №54); останалите — да."""
+    for key, spec in SERIES_CATALOG.items():
+        if spec["source"] == "derived":
+            continue
+        assert source_url(spec["source"], spec["id"]) in rendered, key
 
 
 def test_html_carries_the_narrative_hint_as_a_tooltip(rendered):

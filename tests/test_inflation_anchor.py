@@ -161,13 +161,14 @@ def test_perceived_reading_is_none_without_data():
 # КАТАЛОГЪТ
 # ═════════════════════════════════════════════════════════════════════════════
 
-def test_catalog_carries_twenty_one_series_after_the_rents():
-    """18 след контекстната серия на М48 + двете фискални на М50 + наемите на М51.
+def test_catalog_carries_twenty_three_series_after_the_credit_gdp_pair():
+    """18 (М48) + двете фискални (М50) + наемите (М51) + двете на М54.
 
     Броячът се вдига с мандата, който добавя серията — механиката на усещаната
-    инфлация остава непипната (наемите влизат по нейния прецедент).
+    инфлация остава непипната (всяка следваща контекстна серия влиза по нейния
+    прецедент).
     """
-    assert len(SERIES_CATALOG) == 21
+    assert len(SERIES_CATALOG) == 23
 
 
 def test_perceived_series_reads_the_ec_survey_balance():
@@ -284,13 +285,18 @@ def test_the_reconstructed_history_is_untouched_too(tmp_path):
 
 @pytest.fixture(scope="module")
 def cache_snapshot():
-    from sources import build_adapters
     from catalog.series import series_by_source
+    from sources import build_adapters
+    from sources.derived import derive_series
+    from sources.manual_seed import splice_loans
 
     snapshot = {}
     for source_name, adapter in build_adapters().items():
         keys = [spec["_key"] for spec in series_by_source(source_name)]
         snapshot.update(adapter.get_snapshot(keys))
+    # Същият път като живия (мандат №54) — фикстурата не бива да е по-бедна от
+    # `run.py::_score_everything`, иначе тя мери друг снапшот.
+    snapshot = derive_series(splice_loans(snapshot))
     if PERCEIVED not in snapshot:
         pytest.skip("кешът в data/ няма контекстната серия — тестът иска комитнатия кеш")
     return snapshot

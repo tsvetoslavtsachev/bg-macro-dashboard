@@ -42,6 +42,7 @@ from catalog.series import SERIES_CATALOG, series_by_source
 from config import MODULE_WEIGHTS
 from core.scorer import compute_composite_score, compute_lens_reports, score_series
 from sources import build_adapters
+from sources.derived import derive_series
 from sources.manual_seed import splice_loans
 
 
@@ -53,16 +54,19 @@ from sources.manual_seed import splice_loans
 def cache_snapshot():
     """Snapshot от КОМИТНАТИЯ кеш — без нито една мрежова заявка.
 
-    `get_snapshot` чете само `data/*.json`; `splice_loans` е същата стъпка като
-    в `run.py::_score_everything`, за да е сравнението с живото честно.
+    `get_snapshot` чете само `data/*.json`; `splice_loans` → `derive_series` е
+    точно веригата от `run.py::_score_everything` (мандат №54), за да е
+    сравнението с живото честно. Проверката за пълнота стои СЛЕД деривацията —
+    изведената серия не идва от адаптер.
     """
     snapshot = {}
     for source_name, adapter in build_adapters().items():
         keys = [spec["_key"] for spec in series_by_source(source_name)]
         snapshot.update(adapter.get_snapshot(keys))
+    snapshot = derive_series(splice_loans(snapshot))
     if len(snapshot) < len(SERIES_CATALOG):
         pytest.skip("кешът в data/ е непълен — тестът иска комитнатия кеш")
-    return splice_loans(snapshot)
+    return snapshot
 
 
 @pytest.fixture(scope="module")

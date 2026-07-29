@@ -2,7 +2,18 @@
 tests/test_catalog.py
 =====================
 Закотвя каталога: валиден е и сочи към живите Eurostat набори.
+
+От мандат №54 тук живее и ПАРАМЕТРИЗИРАНИЯТ контекст-гейт: за ВСЯКА серия с
+`context_only: True` композитът, всяка леща и реконструираната история са
+бит-в-бит същите със и без нея. Досега гейтът се пишеше НАНОВО за всяка нова
+контекстна серия (№48 в `test_inflation_anchor.py`, №51 в `test_tension.py`) —
+лечението из корен е списъкът да се чете от каталога: петата контекстна серия
+влиза без нито един нов тест.
 """
+import numpy as np
+import pandas as pd
+import pytest
+
 from catalog.series import SERIES_CATALOG, validate_catalog
 
 
@@ -38,19 +49,22 @@ def test_current_account_is_four_quarter_rolling():
 
 # ── Фаза 3.1: БНБ сериите (мандат №39 §А2) ───────────────────────────────────
 
-def test_catalog_carries_twenty_one_series_of_which_nineteen_are_scored():
-    """18 след М48 + двете фискални серии на М50 + наемите на М51.
+def test_catalog_carries_twenty_three_series_of_which_nineteen_are_scored():
+    """21 след М51 + номиналният БВП и изведеното кредит/БВП на М54.
 
-    Двете числа се държат ОТДЕЛНО нарочно: каталогът расте на 21, но уредът,
-    който произвежда композита, остава на 19 — двете контекстни серии
-    (усещаната инфлация и наемите) не влизат в никоя леща. Ако някой ден
-    контекстна серия се промъкне в леща, второто число ще се смени и тестът
-    ще го каже.
+    Двете числа се държат ОТДЕЛНО нарочно: каталогът расте на 23, но уредът,
+    който произвежда композита, остава на 19 — четирите контекстни серии не
+    влизат в никоя леща. Ако някой ден контекстна серия се промъкне в леща,
+    второто число ще се смени и тестът ще го каже.
     """
-    assert len(SERIES_CATALOG) == 21
+    assert len(SERIES_CATALOG) == 23
     scored = [k for k, v in SERIES_CATALOG.items() if not v.get("context_only")]
     assert len(scored) == 19
     assert all(SERIES_CATALOG[k]["lens"] for k in scored)
+    context = sorted(k for k, v in SERIES_CATALOG.items() if v.get("context_only"))
+    assert context == [
+        "BG_CREDIT_GDP_HH", "BG_INFL_PERCEIVED", "BG_NGDP", "BG_RENTS"
+    ]
 
 
 def test_loan_series_come_from_the_ecb_bsi_dataset():
@@ -302,6 +316,147 @@ def test_the_fiscal_series_carry_the_lever_and_the_drift_in_their_hints():
     """Числото пътува с изречението си: единственият домашен лост · дрейфът."""
     assert "лост" in SERIES_CATALOG["BG_GOV_BALANCE"]["narrative_hint"]
     assert "ДРЕЙФА" in SERIES_CATALOG["BG_GOV_DEBT"]["narrative_hint"]
+
+
+# ── Мандат №54: двете нови контекстни серии ──────────────────────────────────
+
+def test_nominal_gdp_reads_the_current_price_quarterly_series():
+    """Точната заявка е решение на мандата — пинва се, за да не се преоткрива.
+
+    `CP_MEUR` (текущи цени, млн. EUR) · `B1QG`-то на националните сметки `B1GQ` ·
+    **NSA**: конвенцията на изведеното съотношение отдолу е 4-тримесечна СУМА, а
+    тя сама гаси сезонността — сезонно изгладеният вариант би бил второ
+    изглаждане на същото (живо проверено 29.07.2026: SCA дава същото ratio до
+    0.1пп).
+    """
+    spec = SERIES_CATALOG["BG_NGDP"]
+    assert spec["source"] == "eurostat"
+    assert "namq_10_gdp" in spec["id"]
+    assert "unit=CP_MEUR" in spec["id"]
+    assert "na_item=B1GQ" in spec["id"]
+    assert "s_adj=NSA" in spec["id"]
+    assert spec["release_schedule"] == "quarterly"
+    assert spec["historical_start"] == "1995-01-01"
+
+
+def test_nominal_gdp_is_a_level_read_as_a_smoothed_growth_rate():
+    """Суровото е НИВО в млн. EUR → `is_rate: False`, точно както `BG_PERMITS`.
+
+    Ставка става чак СЛЕД трансформацията; `yoy_roll4` държи числото до
+    кредитния г/г в разрива — две изгладени числа, не едно шумно тримесечие
+    срещу една плъзгаща.
+    """
+    spec = SERIES_CATALOG["BG_NGDP"]
+    assert spec["transform"] == "yoy_roll4"
+    assert spec["is_rate"] is False
+    assert SERIES_CATALOG["BG_PERMITS"]["is_rate"] is False    # прецедентът
+
+
+def test_the_credit_to_gdp_series_is_derived_not_fetched():
+    """Първата серия без източник: тя има РЕЦЕПТА, не адрес."""
+    from catalog.series import ALLOWED_SOURCES
+    from sources import build_adapters
+
+    spec = SERIES_CATALOG["BG_CREDIT_GDP_HH"]
+    assert spec["source"] == "derived"
+    assert "derived" in ALLOWED_SOURCES
+    assert "derived" not in build_adapters(), (
+        "изведената серия не бива да има адаптер — тя се ражда от снапшота"
+    )
+    assert spec["transform"] == "level"     # серията ВЕЧЕ е съотношение
+    assert spec["is_rate"] is True
+    assert spec["release_schedule"] == "quarterly"
+
+
+def test_the_derived_series_shows_no_source_link_instead_of_a_lying_one():
+    """ФОРМА-КАНОН уговорката: липсващ линк е по-честен от линк, който лъже —
+    изведената серия няма собствен първоизточник, съставките ѝ имат."""
+    from core.display import source_url
+
+    spec = SERIES_CATALOG["BG_CREDIT_GDP_HH"]
+    assert source_url(spec["source"], spec["id"]) == ""
+    for ingredient in ("BG_LOANS_HH", "BG_NGDP"):
+        ing = SERIES_CATALOG[ingredient]
+        assert source_url(ing["source"], ing["id"]).startswith("https://"), ingredient
+
+
+# ── ПАРАМЕТРИЗИРАНИЯТ контекст-гейт (мандат №54 §3.2, из корен) ──────────────
+
+CONTEXT_KEYS = sorted(k for k, v in SERIES_CATALOG.items() if v.get("context_only"))
+
+
+def _synthetic_snapshot(n: int = 300, seed: int = 17) -> dict:
+    """Детерминистичен снапшот с ВСЯКА каталожна серия (вкл. изведената)."""
+    idx = pd.date_range(end="2026-06-01", periods=n, freq="MS")
+    rng = np.random.RandomState(seed)
+    return {
+        key: pd.Series(50.0 + np.cumsum(rng.normal(0, 0.6, n)), index=idx)
+        for key in SERIES_CATALOG
+    }
+
+
+@pytest.mark.parametrize("key", CONTEXT_KEYS)
+def test_every_context_series_leaves_the_composite_bit_for_bit(key):
+    """Каталог СЪС и БЕЗ контекстната серия → ТОЧНО равни. Не approx.
+
+    Гейтът чете списъка от КАТАЛОГА, затова петата контекстна серия влиза без
+    нов тест. Серията остава в снапшота и в двата случая — решава каталогът,
+    не наличието на данни.
+    """
+    from core.scorer import compute_composite_score, compute_lens_reports
+
+    snapshot = _synthetic_snapshot()
+    without = {k: v for k, v in SERIES_CATALOG.items() if k != key}
+
+    rep_with = compute_lens_reports(SERIES_CATALOG, snapshot)
+    rep_without = compute_lens_reports(without, snapshot)
+
+    assert set(rep_with) == set(rep_without)
+    for lens in rep_with:
+        assert rep_with[lens]["score"] == rep_without[lens]["score"], (key, lens)
+        assert rep_with[lens]["health_z"] == rep_without[lens]["health_z"], (key, lens)
+        assert rep_with[lens]["n_series"] == rep_without[lens]["n_series"], (key, lens)
+
+    comp_with = compute_composite_score({l: r["score"] for l, r in rep_with.items()})
+    comp_without = compute_composite_score(
+        {l: r["score"] for l, r in rep_without.items()})
+    assert comp_with == comp_without
+
+
+@pytest.mark.parametrize("key", CONTEXT_KEYS)
+def test_every_context_series_leaves_the_reconstructed_history_untouched(key):
+    """И филмът мери същия уред — иначе историята щеше да се раздвои с лицето."""
+    from analysis.lens_history import build_history
+    from pandas.testing import assert_frame_equal
+
+    snapshot = _synthetic_snapshot()
+    without = {k: v for k, v in SERIES_CATALOG.items() if k != key}
+    assert_frame_equal(
+        build_history(SERIES_CATALOG, snapshot, grid_start="2024-12-01"),
+        build_history(without, snapshot, grid_start="2024-12-01"),
+    )
+
+
+@pytest.mark.parametrize("key", CONTEXT_KEYS)
+def test_no_context_series_ever_reaches_a_lens_report(key):
+    """Механиката, не само числото: ключът го няма в нито един лещов доклад."""
+    from core.scorer import compute_lens_reports
+
+    reports = compute_lens_reports(SERIES_CATALOG, _synthetic_snapshot())
+    scored_keys = {s["key"] for rep in reports.values() for s in rep["series"]}
+    assert key not in scored_keys
+    assert "BG_HICP" in scored_keys      # гейтът не е тривиално празен
+
+
+@pytest.mark.parametrize("key", CONTEXT_KEYS)
+def test_no_context_series_carries_a_lens_or_a_polarity(key):
+    """Полярност за нескорирана серия е мъртва декларация — тя подсказва
+    участие в композита, каквото няма."""
+    from catalog.polarity import POLARITY
+
+    assert SERIES_CATALOG[key]["lens"] == []
+    assert SERIES_CATALOG[key]["peer_group"] == "context"
+    assert key not in POLARITY
 
 
 # ── README-то догонва каталога (мандат №52 §А5) ──────────────────────────────

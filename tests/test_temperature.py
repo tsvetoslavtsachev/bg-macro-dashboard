@@ -33,6 +33,7 @@ from analysis.temperature import (
 from catalog.polarity import opt_keys, opt_zone, polarity_for
 from catalog.series import SERIES_CATALOG, series_by_source
 from sources import build_adapters
+from sources.derived import derive_series
 from sources.manual_seed import splice_loans
 
 
@@ -42,13 +43,17 @@ from sources.manual_seed import splice_loans
 
 @pytest.fixture(scope="module")
 def cache_snapshot():
+    # Живата верига от `run.py::_score_everything` (мандат №54): fetch → splice
+    # → derive. Проверката за пълнота е СЛЕД деривацията — изведената серия не
+    # идва от адаптер и без нея снапшотът винаги би изглеждал „непълен".
     snapshot = {}
     for source_name, adapter in build_adapters().items():
         keys = [spec["_key"] for spec in series_by_source(source_name)]
         snapshot.update(adapter.get_snapshot(keys))
+    snapshot = derive_series(splice_loans(snapshot))
     if len(snapshot) < len(SERIES_CATALOG):
         pytest.skip("кешът в data/ е непълен — тестът иска комитнатия кеш")
-    return splice_loans(snapshot)
+    return snapshot
 
 
 @pytest.fixture(scope="module")

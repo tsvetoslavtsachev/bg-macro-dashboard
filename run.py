@@ -24,6 +24,7 @@ BASE_DIR = Path(__file__).parent
 sys.path.insert(0, str(BASE_DIR))
 
 from sources import build_adapters
+from sources.derived import derive_series
 from sources.manual_seed import splice_loans
 from analysis.temperature import temperature
 from analysis.tension import annihilation, ratio_str
@@ -61,6 +62,10 @@ def _score_everything(force: bool = False) -> tuple[dict, dict, float | None, di
     # context export): БНБ seed 2005Q4+ отпред, завършените ЕЦБ BSI тримесечия
     # отзад, шевът валидиран (sources/manual_seed.py).
     snapshot = splice_loans(snapshot)
+    # Изведените серии се раждат СЛЕД сплайса — редът е задължителен: кредитът
+    # домакинства/БВП стъпва на ДЪЛГИЯ (сплайснат, тримесечен) сток, иначе би
+    # мерил само късия прозорец на ЕЦБ портала (мандат №54).
+    snapshot = derive_series(snapshot)
     lens_reports = compute_lens_reports(SERIES_CATALOG, snapshot)
     module_scores = {lens: rep["score"] for lens, rep in lens_reports.items()}
     composite = compute_composite_score(module_scores)
@@ -129,6 +134,7 @@ def cmd_status(args):
 
 def cmd_briefing(args):
     """Генерира HTML дашборда + обновява историята и живия журнал."""
+    from core.display import housing_hypotheses
     from export.methodology import generate_methodology
     from export.weekly_briefing import generate_html
     from analysis.lens_history import (
@@ -158,8 +164,11 @@ def cmd_briefing(args):
     # Двете страници се раждат ЗАЕДНО (мандат №52). Ако методологията се
     # генерираше отделно, лицето и обяснението му щяха да се разминат тихо —
     # линкът щеше да води към вчерашния текст.
+    # Хипотезните числа са ЖИВИ (мандат №54) — методологията ги ЦИТИРА от
+    # `core.display`, същия източник, от който чете и context експортът.
     generate_methodology(str(BASE_DIR / "output" / "methodology.html"),
-                         history=history)
+                         history=history,
+                         housing=housing_hypotheses(snapshot))
     return 0
 
 
