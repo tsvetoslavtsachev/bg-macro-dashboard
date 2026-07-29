@@ -178,7 +178,11 @@ def test_the_decision_carries_its_data_at_the_decision():
 
 
 def test_the_boom_polarities_are_no_longer_declared_under_review():
-    """„Под преглед“ беше вярно до №47; след него е тиха неистина."""
+    """„Под преглед“ беше вярно до №47; след него е тиха неистина.
+
+    Пази и README.md: гардът покриваше само кода и документацията дрейфна
+    незабелязано (README твърдеше „ПОД ПРЕГЛЕД / Фаза 3.x“ още един мандат).
+    """
     import catalog.polarity as polarity_module
     from pathlib import Path
 
@@ -186,6 +190,12 @@ def test_the_boom_polarities_are_no_longer_declared_under_review():
     assert "ПОД ПРЕГЛЕД" not in source
     assert "под преглед" not in source
     assert "РЕШЕНО с №47" in source
+
+    readme = Path(polarity_module.__file__).parents[1] / "README.md"
+    readme_text = readme.read_text(encoding="utf-8")
+    assert "ПОД ПРЕГЛЕД" not in readme_text
+    assert "под преглед" not in readme_text
+    assert "РЕШЕНИ с мандат №47" in readme_text
 
 
 def test_every_catalog_series_has_an_explicit_polarity():
