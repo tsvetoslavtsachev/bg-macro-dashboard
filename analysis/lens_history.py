@@ -38,6 +38,13 @@ analysis/lens_history.py
 абсолютни, затова колоната е смятаема назад БЕЗ look-ahead и точно тя носи
 приемния гейт (2006H2-2008 свети · 2015-2019 мълчи). Виж
 `analysis/temperature.py`.
+
+⚠ Мандат №51: всеки ред носи и ТЕНЗИЯ (`k1_ratio`) — колко от лещовата енергия
+се погасява в средното на този марк. Числото се смята от СЪЩИТЕ лещови доклади,
+от които идват `score_*` колоните (нула независими пътища), затова е
+консистентно с реда по конструкция. „н.д." (енергия под прага) е ПРАЗНА клетка,
+не 0. Виж `analysis/tension.py` — включително декларацията 6→7: П4 тестът
+съдеше 6-лещовата история, тази колона тече на 7-лещовия уред.
 """
 from __future__ import annotations
 
@@ -51,6 +58,7 @@ import pandas as pd
 
 from config import DATA_DIR, MODULE_WEIGHTS
 from analysis.temperature import hot_keys_str, temperature
+from analysis.tension import annihilation
 from catalog.polarity import polarity_for
 from catalog.series import SERIES_CATALOG
 from core.scorer import (
@@ -101,13 +109,17 @@ def history_columns() -> list[str]:
     `temp_count` / `temp_hot` са температурният слой (мандат №47): колко
     бум-серии стоят над зоната си на този марк и кои точно. Праговете са
     АБСОЛЮТНИ, затова колоната е смятаема и назад — нула look-ahead.
+
+    `k1_ratio` е тензионният слой (мандат №51): колко от лещовата енергия се
+    погасява в средното. Смята се от score-овете на СЪЩИЯ ред, затова също е
+    валидна назад — тя не пита данните за нищо ново.
     """
     lenses = _lens_order()
     return (
         ["composite"]
         + [f"z_{lens}" for lens in lenses]
         + [f"score_{lens}" for lens in lenses]
-        + ["n_series", "n_lenses", "temp_count", "temp_hot", "row_type"]
+        + ["n_series", "n_lenses", "temp_count", "temp_hot", "k1_ratio", "row_type"]
     )
 
 
@@ -118,7 +130,7 @@ def journal_columns() -> list[str]:
         ["date", "composite"]
         + [f"score_{lens}" for lens in lenses]
         + [f"z_{lens}" for lens in lenses]
-        + ["n_series", "n_lenses", "temp_count", "composition"]
+        + ["n_series", "n_lenses", "temp_count", "k1_ratio", "composition"]
     )
 
 
@@ -198,10 +210,14 @@ def build_grid(
 
 def _row_from_reports(lens_reports: dict, composite: Optional[float],
                       row_type: str, temp: Optional[dict] = None) -> dict[str, Any]:
-    """Лещовите доклади (+ температурата) → един ред на решетката/журнала.
+    """Лещовите доклади (+ температурата + тензията) → един ред.
 
     `temp=None` значи „не е мерено", не „нула горещи" — редът носи празна
     стойност вместо фалшива студенина.
+
+    `k1_ratio` се смята ТУК, от същите доклади: така колоната не може да се
+    разсинхронизира със `score_*` колоните на реда. „н.д." (енергия под прага)
+    остава празна клетка — не 0.
     """
     row: dict[str, Any] = {"composite": composite}
     for lens in _lens_order():
@@ -218,6 +234,7 @@ def _row_from_reports(lens_reports: dict, composite: Optional[float],
     ))
     row["temp_count"] = None if temp is None else int(temp.get("n_hot", 0))
     row["temp_hot"] = hot_keys_str(temp)
+    row["k1_ratio"] = annihilation(lens_reports).get("ratio")
     row["row_type"] = row_type
     return row
 
@@ -279,6 +296,9 @@ def _normalize_history(df: pd.DataFrame) -> pd.DataFrame:
     # колоната е nullable: празно = „не е мерено", 0 = „мерено, никой не гори".
     df["temp_count"] = pd.to_numeric(df["temp_count"], errors="coerce").astype("Int64")
     df["temp_hot"] = df["temp_hot"].fillna("").astype("object")
+    # Тензията е ЧИСЛО с легитимно празно: „н.д." (енергия под прага) е отказ да
+    # се произведе показание, не нула. Затова float64 с NaN, а не 0.0.
+    df["k1_ratio"] = pd.to_numeric(df["k1_ratio"], errors="coerce").astype("float64")
     df["row_type"] = df["row_type"].astype("object")
     df.index = pd.DatetimeIndex(df.index, name="date")
     return df
@@ -318,6 +338,8 @@ def _normalize_journal(df: pd.DataFrame) -> pd.DataFrame:
         df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0).astype("int64")
     # Старите редове (отпреди №47) нямат температура — остават ПРАЗНИ, не 0.
     df["temp_count"] = pd.to_numeric(df["temp_count"], errors="coerce").astype("Int64")
+    # Същото за тензията (отпреди №51): празна клетка = „не е мерено".
+    df["k1_ratio"] = pd.to_numeric(df["k1_ratio"], errors="coerce").astype("float64")
     df["date"] = df["date"].astype(str)
     df["composition"] = df["composition"].astype(str)
     return df.sort_values("date", kind="stable").reset_index(drop=True)
@@ -348,6 +370,7 @@ def append_journal(
     `temp` е изходът на `analysis.temperature.temperature()`; без него редът
     носи празна температура (честно „не е мерено"), не фалшива нула. Тагът
     `composition` се сменя САМ с новите полярности — очаквано по дизайн.
+    Тензията (`k1_ratio`) не иска аргумент: тя се смята от самите доклади.
     """
     today = date.today() if today is None else today
     row = _row_from_reports(lens_reports, composite, ROW_LIVE, temp=temp)

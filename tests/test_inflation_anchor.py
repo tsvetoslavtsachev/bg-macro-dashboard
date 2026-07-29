@@ -161,9 +161,13 @@ def test_perceived_reading_is_none_without_data():
 # КАТАЛОГЪТ
 # ═════════════════════════════════════════════════════════════════════════════
 
-def test_catalog_carries_twenty_series_after_the_fiscal_lens():
-    """18 след контекстната серия на М48 + двете фискални серии на М50."""
-    assert len(SERIES_CATALOG) == 20
+def test_catalog_carries_twenty_one_series_after_the_rents():
+    """18 след контекстната серия на М48 + двете фискални на М50 + наемите на М51.
+
+    Броячът се вдига с мандата, който добавя серията — механиката на усещаната
+    инфлация остава непипната (наемите влизат по нейния прецедент).
+    """
+    assert len(SERIES_CATALOG) == 21
 
 
 def test_perceived_series_reads_the_ec_survey_balance():

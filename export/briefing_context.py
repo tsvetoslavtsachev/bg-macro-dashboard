@@ -19,6 +19,14 @@ import math
 
 from analysis.lens_history import HONESTY_LABEL, history_stats, yearly_table
 from analysis.temperature import TEMP_SERIES, zone_table
+from analysis.tension import (
+    AS_OF_NOTE,
+    ENERGY_FLOOR,
+    anchors_note,
+    price_str,
+    price_table,
+    ratio_str,
+)
 from catalog.polarity import OPT_SOURCE_NOTE, U_BAND
 from catalog.series import SERIES_CATALOG
 from config import LENS_BANDS, LENS_NAMES_BG
@@ -152,6 +160,31 @@ DATA_QUALITY_NOTES = [
     "остава тънка линия на графиката; таблиците четат плъзгащата. Тримесечна, "
     "n=109 от 1999Q1. Фискалният лост е ЕДИНСТВЕНИЯТ домашен макро лост — "
     "България няма собствена лихвена политика.",
+    "**К1 „Погасяването“ (мандат №51) е СЛОЙ ВЪРХУ уреда, не в него.** "
+    "`ratio = 1 − |Σw·(L−50)| / Σw·|L−50|` — колко лещова енергия се изяжда в "
+    "средното (0 = консенсус, близо до 1 = воюващи сили). Мери **лъжливото "
+    "средно, не кризата**: при срив всички лещи падат заедно и К1 мълчи. "
+    "Енергия под 5 т. → **„н.д.“**, не 0. ⚠ П4 (`49-P4-TENSION-REPORT.md`) "
+    "съдеше **6-лещовата** история; вграденият К1 е на **7-лещовия** уред — "
+    "не сравнявай 1:1. Публично: full („реконструирана“); as-of е в одита.",
+    "**Двете хипотези за кредитно-жилищния бум (мандат №51) — РАВНОСТОЙНИ, "
+    "нито една установена.** (1) Заместващата: доходите изместват наема с "
+    "покупка — компенсации **+213%** срещу HPI **+176%** (2015→2026Q1; "
+    "агрегатна МАСА, не заплата на човек). (2) Ливъриджната: кредит "
+    "домакинства/БВП **19.0%** (2022) → **26.3%** сега, над върха **24.6%** от "
+    "2008, ~+2.5пп/год.; разрив „кредит − номинален БВП“ ≈ **+9пп**. Наемите "
+    "не подкрепят (1): **10.1%** г/г при медиана **1.0%** за 2015-19. "
+    "Фалсификатори: (1) пада при стесняващ се разрив и забавящи наеми; (2) "
+    "пада, ако кредит/БВП спре да расте с >2пп/год. и цените се върнат към "
+    "доходите. Ирландия 2005-07: и owner-occupier бум с реални доходи завършва "
+    "зле — уязвимостта е ливъриджът на новите нива. Снимка към 29.07.2026, не "
+    "жив дериват — **не обявявай победител**.",
+    "**Наемите (BG_RENTS) са ВТОРАТА контекстна серия — извън композита.** "
+    "`prc_hicp_minr?geo=BG&coicop18=CP041&unit=RCH_A`, г/г %, месечна, "
+    "**n=343 от 1997-12**; `prc_hicp_midx` е ПРАЗНА за BG/CP041 → четем "
+    "готовата ставка. `lens: []` + `context_only: True` (прецедентът на "
+    "усещаната). Купуването и наемането се преоценяват заедно — наемите са "
+    "дискриминаторът на хипотезите горе.",
     "**Държавният дълг (BG_GOV_DEBT) се чете като НИВО, а скорът мери ДРЕЙФА.** "
     "Eurostat `gov_10q_ggdebt?geo=BG&na_item=GD&sector=S13&unit=PC_GDP`, "
     "тримесечен, n=110 от 1995Q4. **28.5% от БВП към Q1'26**, след +6.2пп за "
@@ -367,6 +400,58 @@ def _temperature_section(temp) -> list[str]:
     return L
 
 
+def _tension_section(tension, history=None) -> list[str]:
+    """„Тензионният слой (К1)" — показанието, разписката и фалсификаторът (№51).
+
+    Всяко число идва от `analysis.tension`, което пък чете само лещовите
+    доклади. Секцията се появява САМО когато има показание — стар пуск без
+    тензия не ражда празна рамка.
+    """
+    if not tension or not tension.get("sentence"):
+        return []
+
+    L: list[str] = []
+    L.append(f"## Тензионният слой (К1 „Погасяването“): {ratio_str(tension)}")
+    L.append("")
+    L.append(tension["sentence"])
+    L.append("")
+    L.append(f"Енергия {tension['energy']:.2f} т. → нето {tension['net']:.2f} т. "
+             f"(праг на отказа: под {ENERGY_FLOOR:.0f} т. енергия показанието е "
+             f"„н.д.“, не 0). К1 мери ЛЪЖЛИВОТО СРЕДНО, не кризата: при срив "
+             f"всички лещи падат заедно, нищо не се погасява и показанието "
+             f"правилно мълчи.")
+    L.append("")
+
+    rows = price_table(tension)
+    if rows:
+        L.append("**Разписката (leave-one-out аукцион — цена = композит БЕЗ "
+                 "лещата минус композит С нея; плюс = тежи, минус = крепи):**")
+        L.append("")
+        L.append("| Леща | Цена (композитни точки) | Композит без нея |")
+        L.append("|------|-------------------------|------------------|")
+        base = tension.get("composite")
+        for r in rows:
+            without = "—" if base is None else f"{base + r['price']:.1f}"
+            L.append(f"| {LENS_NAMES_BG.get(r['lens'], r['lens'])} | "
+                     f"{price_str(r['price'])} | {without} |")
+        L.append("")
+
+    falsifier = tension.get("falsifier") or {}
+    if falsifier.get("sentence"):
+        L.append(f"**Falsifier:** {falsifier['sentence']}")
+        L.append("")
+
+    # Декларацията 6→7 пътува ВЪТРЕ в котвеното изречение (един източник) —
+    # затова тук стои само правилото за as-of четенето.
+    L.append(f"⚠ {AS_OF_NOTE}")
+    L.append("")
+    L.append(f"⚠ {anchors_note(history)}")
+    L.append("")
+    L.append("---")
+    L.append("")
+    return L
+
+
 def generate_briefing_context(
     snapshot: dict,
     lens_reports: dict,
@@ -377,6 +462,7 @@ def generate_briefing_context(
     history=None,
     wow=None,
     temp=None,
+    tension=None,
 ) -> str:
     """Генерира Markdown context и го записва. Връща пътя."""
     if today is None:
@@ -428,6 +514,9 @@ def generate_briefing_context(
 
     # ── Термометърът: колко бум-серии горят (мандат №47) ─────────────────────
     L.extend(_temperature_section(temp))
+
+    # ── Тензията: колко от енергията се погасява (мандат №51) ────────────────
+    L.extend(_tension_section(tension, history))
 
     # ── Секция на всяка леща ─────────────────────────────────────────────────
     voices = inflation_voices(snapshot)

@@ -26,6 +26,7 @@ sys.path.insert(0, str(BASE_DIR))
 from sources import build_adapters
 from sources.manual_seed import splice_loans
 from analysis.temperature import temperature
+from analysis.tension import annihilation, ratio_str
 from catalog.series import SERIES_CATALOG, series_by_source, validate_catalog
 from core.primitives import apply_transform
 from core.scorer import (
@@ -92,6 +93,10 @@ def cmd_status(args):
     ) or "нито една над зоната си"
     print(f"🌡 Прегряване: {temp['n_hot']}/{temp['n_total']} ({hot_str})")
 
+    # Тензионният слой (мандат №51) — колко от лещовата енергия се погасява.
+    tension = annihilation(lens_reports)
+    print(f"⚖ Погасяване (К1): {ratio_str(tension)} — {tension['sentence']}")
+
     for lens, rep in lens_reports.items():
         z = rep["health_z"]
         z_str = f"z={z:+.2f}" if z is not None else "няма данни"
@@ -146,7 +151,8 @@ def cmd_briefing(args):
 
     output_file = BASE_DIR / "output" / "index.html"
     generate_html(snapshot, lens_reports, composite, regime, str(output_file),
-                  history=history, wow=wow, temp=temp)
+                  history=history, wow=wow, temp=temp,
+                  tension=annihilation(lens_reports))
     return 0
 
 
@@ -179,6 +185,7 @@ def cmd_export_context(args):
         history=history,
         wow=wow,
         temp=temperature(SERIES_CATALOG, snapshot),
+        tension=annihilation(lens_reports),
     )
     return 0
 

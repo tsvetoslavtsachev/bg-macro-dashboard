@@ -38,14 +38,16 @@ def test_current_account_is_four_quarter_rolling():
 
 # ── Фаза 3.1: БНБ сериите (мандат №39 §А2) ───────────────────────────────────
 
-def test_catalog_carries_twenty_series_of_which_nineteen_are_scored():
-    """18 след М48 + двете фискални серии на М50.
+def test_catalog_carries_twenty_one_series_of_which_nineteen_are_scored():
+    """18 след М48 + двете фискални серии на М50 + наемите на М51.
 
-    Двете числа се държат ОТДЕЛНО нарочно: каталогът расте на 20, но уредът,
-    който произвежда композита, е на 19. Ако някой ден контекстна серия
-    се промъкне в леща, второто число ще се смени и тестът ще го каже.
+    Двете числа се държат ОТДЕЛНО нарочно: каталогът расте на 21, но уредът,
+    който произвежда композита, остава на 19 — двете контекстни серии
+    (усещаната инфлация и наемите) не влизат в никоя леща. Ако някой ден
+    контекстна серия се промъкне в леща, второто число ще се смени и тестът
+    ще го каже.
     """
-    assert len(SERIES_CATALOG) == 20
+    assert len(SERIES_CATALOG) == 21
     scored = [k for k, v in SERIES_CATALOG.items() if not v.get("context_only")]
     assert len(scored) == 19
     assert all(SERIES_CATALOG[k]["lens"] for k in scored)

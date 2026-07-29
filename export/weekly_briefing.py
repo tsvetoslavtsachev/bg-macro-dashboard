@@ -25,6 +25,14 @@ from config import (
 )
 from analysis.lens_history import HONESTY_LABEL, ROW_LIVE, ROW_QUARTER
 from analysis.temperature import TEMP_SERIES, temp_level, zone_table
+from analysis.tension import (
+    AS_OF_NOTE,
+    ND_LABEL,
+    SIX_TO_SEVEN_NOTE,
+    anchors_note,
+    price_str,
+    price_table,
+)
 from catalog.polarity import INFLATION_TARGET, OPT_SOURCE_NOTE, U_BAND
 from catalog.series import SERIES_CATALOG
 from core.display import (
@@ -49,6 +57,11 @@ TEMP_COLORS = {
     "warm": "#ff9800",
     "hot":  "#ef4444",
 }
+
+# ── Тензионният слой: цветът на К1 линията (мандат №51) ──────────────────────
+# Приглушен вариант на акцента — линията е ПРОЧИТ върху композита, не втори
+# композит; затова е тънка и по-бледа от лилавата линия на самия композит.
+TENSION_COLOR = "#a99bff"
 
 
 # ── Броят лещи не е зашит никъде в текста (мандат №43) ───────────────────────
@@ -215,6 +228,21 @@ def _prep_film_data(history) -> dict:
             "note": ("Температурата: колко бум-серии са над зоната си "
                      "(абсолютни котви — валидни и назад)"),
         }
+
+    # ── Тензионната линия (мандат №51) ───────────────────────────────────────
+    # Същите тримесечни маркове, дясна ос 0–1. „н.д." редовете стават `null` →
+    # линията се КЪСА там, вместо да рисува нула, каквато не е измерена.
+    if "k1_ratio" in q.columns and q["k1_ratio"].notna().any():
+        data["tension"] = {
+            "values": [
+                round(float(v), 3) if pd.notna(v) else None for v in q["k1_ratio"]
+            ],
+            "color": TENSION_COLOR,
+            "name": "Погасена енергия (К1)",
+            "note": ("Погасена енергия (К1, дясна ос 0–1): колко от лещовата "
+                     "енергия се изяжда в средното. Етикетът „реконструирана“ "
+                     "покрива и нея. " + SIX_TO_SEVEN_NOTE),
+        }
     return data
 
 
@@ -294,6 +322,37 @@ def _temp_badge_html(temp) -> str:
     )
 
 
+def _tension_row_html(tension) -> str:
+    """Тензионният ред под извода: „⚖ {изречение}" + разписката в tooltip-а.
+
+    Изречението е ЧЕТИМАТА част (то носи и числото, и двамата виновници);
+    tooltip-ът носи пълния LOO аукцион, декларацията 6→7 и къде живее as-of
+    четенето. Празен вход → няма ред, а не празна рамка.
+    """
+    if not tension or not tension.get("sentence"):
+        return ""
+
+    rows = price_table(tension)
+    parts = []
+    if rows:
+        parts.append(
+            "Разписка (leave-one-out: композит БЕЗ лещата минус композит С нея; "
+            "плюс = тежи, минус = крепи) — "
+            + " · ".join(f"{r['subject']} {price_str(r['price'])}" for r in rows)
+        )
+    falsifier = tension.get("falsifier") or {}
+    if falsifier.get("sentence"):
+        parts.append(falsifier["sentence"])
+    parts.append(SIX_TO_SEVEN_NOTE)
+    parts.append(AS_OF_NOTE)
+    tip = " | ".join(parts)
+
+    return (
+        f'<div class="tension-row" title="{_html.escape(tip)}">'
+        f'⚖ {_html.escape(tension["sentence"])}</div>'
+    )
+
+
 def _zone_rows_html() -> str:
     """Зоните като редове на таблица в методологията — от POLARITY, не преписани."""
     rows = ""
@@ -357,6 +416,7 @@ def generate_html(
     history=None,
     wow=None,
     temp=None,
+    tension=None,
 ):
     chart_data = _prep_chart_data(snapshot)
     film_data = _prep_film_data(history)
@@ -464,6 +524,8 @@ def generate_html(
     regime_name = regime["name"]
     composite_str = _fmt_score(composite)
     temp_badge = _temp_badge_html(temp)
+    tension_row = _tension_row_html(tension)
+    tension_anchors = anchors_note(history)
     zone_rows = _zone_rows_html()
     # Score-ът на серия В зоната — смятан, не преписан: платото е U_BAND, точно
     # както центърът на U-формата, а скалата е фамилната tanh.
@@ -504,6 +566,7 @@ def generate_html(
       <div>
         <div id="film-chart"></div>
         <div class="film-temp-note" id="film-temp-note"></div>
+        <div class="film-temp-note" id="film-tension-note"></div>
       </div>
       <div class="wow-block">
         <h3>Какво се смени тази седмица</h3>
@@ -558,6 +621,11 @@ def generate_html(
   .zone-table th {{ font-size:0.95em; padding:6px 8px; }}
   .zone-table td {{ padding:6px 8px; color:var(--muted); vertical-align:top; }}
   .verdict {{ font-size:1.05em; font-weight:600; color:var(--text); margin-top:10px; max-width:560px; line-height:1.45; }}
+
+  /* Тензионният ред (мандат №51) */
+  .tension-row {{ font-size:0.86em; color:{TENSION_COLOR}; margin-top:8px; max-width:560px;
+                  line-height:1.45; cursor:help; border-left:2px solid {TENSION_COLOR};
+                  padding-left:10px; }}
 
   /* Филмът на композита (мандат №45) */
   .film-card {{ margin-bottom:30px; }}
@@ -677,6 +745,7 @@ def generate_html(
         {temp_badge}
       </div>
       <div class="verdict">{verdict}</div>
+      {tension_row}
       <div class="regime-desc">
         Композитен макроикономически резултат за България по {len(SERIES_CATALOG)} ключови
         индикатора от Eurostat и ЕЦБ (НСИ и БНБ данни). 50 = близката 10-годишна норма;
@@ -784,6 +853,33 @@ def generate_html(
       механично с четенията отпреди.
     </p>
 
+    <h4>Тензионният слой (К1 „Погасяването“)</h4>
+    <p>
+      Композитът е <b>средно</b>, а средното не различава две много различни
+      икономики: една, в която {lens_count_word} лещи стоят около нормата, и
+      друга, в която едни дърпат силно нагоре, други силно надолу и двете се
+      изяждат. Редът със знака ⚖ горе мери точно това: колко от <b>лещовата
+      енергия</b> (<code>Σw·|score−50|</code> — целият вътрешен натиск, без
+      значение накъде) не оцелява до нетното отклонение
+      (<code>|Σw·(score−50)|</code>). Показанието е делът, който се погасява:
+      <code>1 − нето / енергия</code>.
+    </p>
+    <p>
+      Какво НЕ е: <b>детектор на криза</b>. При срив всички лещи сочат надолу
+      заедно, енергията минава почти цялата в нетното и К1 правилно <b>мълчи</b>
+      — композитът тогава е честен. Високо показание значи „композитът е
+      по-спокоен от състоянието, което описва", а не „лошо е". Разписката е
+      <b>leave-one-out аукцион</b> (в tooltip-а на реда): цената на всяка леща е
+      композитът БЕЗ нея минус композитът С нея — <b>плюс</b> значи, че лещата
+      тежи на композита, <b>минус</b> — че го крепи. При лещова енергия под
+      <b>5</b> точки показанието е „{ND_LABEL}", а не нула: малък знаменател не
+      бива да ражда голямо съотношение.
+    </p>
+    <p>
+      {_html.escape(tension_anchors)}
+      {_html.escape(AS_OF_NOTE)}
+    </p>
+
     <h4>Имоти и строителство</h4>
     <p>
       Шестата леща стои на <b>три различни въпроса</b>, затова има три отделни
@@ -799,6 +895,35 @@ def generate_html(
       издържа (в спокойните 2015-19 то стига 61%, докато плъзгащата остава под
       39%). Суровата линия е видима на графиката, но котвата стъпва на
       изгладената.
+    </p>
+    <p>
+      <b>Кредитно-жилищният бум: две живи хипотези, нито една установена.</b>
+      Уредът вижда, че ипотечният кредит и цените на жилищата се движат заедно
+      (термометърът гори точно на тези две серии), но <b>не казва защо</b>. Две
+      четения стоят <b>равностойно</b>:
+      <b>(1) заместващата</b> — растящите доходи изместват наема с покупка, т.е.
+      търсенето е потребителско, а не спекулативно: компенсацията на наетите е
+      +213% срещу +176% на цените на жилищата от 2015 до Q1'26 (уговорка: това е
+      агрегатната <b>маса</b>, не заплата на човек), а от 2020 двете вървят рамо
+      до рамо (+103 срещу +101);
+      <b>(2) ливъриджната</b> — цените се качват на кредит: кредитът за
+      домакинствата спрямо БВП мина 19.0% (2022) → <b>26.3%</b> сега, тоест НАД
+      върха от 2008 (24.6%), и се качва с ~2.5пп годишно, а разривът „кредитен
+      ръст минус номинален БВП ръст" е около <b>+9пп</b>.
+    </p>
+    <p>
+      <b>Фалсификаторите</b> (какво би съборило всяка от двете): заместващата
+      пада, ако разривът се стеснява, а наемите забавят — засега <b>не</b>:
+      наемите растат с <b>10.1%</b> г/г към 06.2026 при медиана <b>1.0%</b> за
+      2015-19, което е трудно съвместимо с „бягство от наема" (затова серията
+      „Наеми" стои на лицето като <b>контекст</b> — сив бадж, без score, извън
+      композита, по прецедента на усещаната инфлация).
+      Ливъриджната пада, ако кредит/БВП спре да расте с над ~2пп годишно и
+      цените се върнат към доходите. Историческият урок е, че <b>мотивът на
+      купувача не е защитата</b>: и owner-occupier бумове с реални доходи
+      (Ирландия 2005-07) завършват зле — уязвимостта е ливъриджът на новите
+      ценови нива при нормализиране на доходите. Числата са <b>снимка към
+      29.07.2026</b> (ръчна сверка), не жив дериват на уреда.
     </p>
 
     <h4>Държавните финанси</h4>
@@ -1091,6 +1216,38 @@ const WOW_DATA = {json.dumps(wow_data, ensure_ascii=False)};
     layout.bargap = 0.25;
     const note = document.getElementById("film-temp-note");
     if (note) note.textContent = FILM_DATA.temp.note;
+  }}
+
+  // Тензионната линия (мандат №51): дясна ос 0–1 върху СЪЩИЯ панел на композита.
+  // Само тя носи легенда — останалите следи си остават без, за да не се
+  // разшуми картинката.
+  if (FILM_DATA.tension) {{
+    traces.forEach(t => {{ t.showlegend = false; }});
+    traces.push({{
+      x: FILM_DATA.dates,
+      y: FILM_DATA.tension.values,
+      type: "scatter",
+      mode: "lines",
+      name: FILM_DATA.tension.name,
+      yaxis: "y3",
+      connectgaps: false,
+      opacity: 0.7,
+      line: {{ color: FILM_DATA.tension.color, width: 1.2, dash: "dot" }},
+      hovertemplate: "%{{x|%b %Y}}: <b>%{{y:.3f}}</b> погасена енергия<extra></extra>"
+    }});
+    layout.yaxis3 = {{
+      overlaying: "y",
+      side: "right",
+      range: [0, 1],
+      dtick: 0.5,
+      showgrid: false,
+      color: FILM_DATA.tension.color,
+      tickfont: {{ size: 10 }}
+    }};
+    layout.showlegend = true;
+    layout.legend = {{ orientation: "h", y: 1.12, x: 0, font: {{ size: 10 }} }};
+    const tnote = document.getElementById("film-tension-note");
+    if (tnote) tnote.textContent = FILM_DATA.tension.note;
   }}
 
   Plotly.newPlot("film-chart", traces, layout, {{displayModeBar: false, responsive: true}});
