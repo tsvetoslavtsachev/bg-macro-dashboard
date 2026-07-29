@@ -353,6 +353,24 @@ def test_a_sub_material_difference_keeps_the_old_bytes(live_history, tmp_path):
     assert path.read_bytes() == before
 
 
+def test_the_observed_ci_jitter_of_one_thousandth_keeps_the_old_bytes(
+        live_history, tmp_path):
+    """Реалният CI↔локално шум е ТОЧНО 0.001 (№51, възпроизведен при №54).
+
+    С праг 1e-3 гардът падаше на собствената си граница — float остатъкът на
+    изваждането бута 0.001 над 1e-3 и файлът се пренаписваше при всеки локален
+    пуск. Прагът трябва да поглъща наблюдавания шум СТРОГО, не да сяда на него.
+    """
+    path = tmp_path / "h.parquet"
+    write_history(live_history, path)
+    before = path.read_bytes()
+
+    wiggled = live_history.copy()
+    wiggled["z_growth"] = wiggled["z_growth"] + 1e-3
+    write_history(wiggled, path)
+    assert path.read_bytes() == before
+
+
 def test_a_material_change_rewrites_the_file(live_history, tmp_path):
     """DEADBAND-ът не е бетон: материална промяна стига до диска."""
     path = tmp_path / "h.parquet"
