@@ -40,7 +40,7 @@ from typing import Any, Optional
 
 import pandas as pd
 
-from config import LENS_SUBJECTS_BG, MODULE_WEIGHTS
+from config import EPOCHS, LENS_SUBJECTS_BG, MODULE_WEIGHTS
 
 # Под този вътрешен натиск съотношението не се смята — знаменателят е твърде
 # малък, за да носи информация (П4 §А5 „правото на отказ").
@@ -71,8 +71,11 @@ ND_LABEL = "н.д."
 # Числата на П4 са от ЗАМРАЗЕНАТА 6-лещова история и се цитират КАТО ТАКИВА, с
 # датата и източника. Живият 7-лещов уред чете същите прозорци по друг начин —
 # затова спокойната епоха се МЕРИ (`epoch_ratio_stats`), не се преписва.
-CALM_EPOCH_START = "2015-01-01"
-CALM_EPOCH_END = "2019-12-31"
+#
+# ⚠ Мандат №55: границите на спокойната епоха вече ЖИВЕЯТ в `config.EPOCHS` —
+# същата декларация обслужва и наемния епохен прочит. Двете имена долу остават
+# като тънки псевдоними, за да не се чупи нито един import.
+CALM_EPOCH_START, CALM_EPOCH_END = EPOCHS["calm"]
 P4_REPORT = "49-P4-TENSION-REPORT.md"
 P4_CALM_RATIO = 0.008      # 2015-19, среден ratio на 6-лещовия уред
 P4_PEAK_RATIO = 0.995      # 2025-09 — „фалшивата неутралност" при композит 49.9

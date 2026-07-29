@@ -131,12 +131,50 @@ def _housing_hypotheses_html(housing=None) -> str:
     if lesson:
         parts.append(f"<p>{_html.escape(lesson)}</p>")
 
+    parts.append(_rents_epochs_html(housing.get("rents_epochs")))
+
     # Изречението се именува само („Ревизия (мандат …)") — втори етикет отпред
     # би го удвоил.
     parts.append(f"""
     <p>⚠ {_html.escape(housing['revision'])}</p>
     <p>{_html.escape(housing['equivalence'])}</p>""")
     return "".join(parts)
+
+
+def _rents_epochs_html(epochs=None) -> str:
+    """Наемите през епохите — ЕДНО изречение + разписката му (мандат №55).
+
+    Изречението е ДОСЛОВНО това на `core.display.rents_epochs_reading`, точно
+    както context експортът го носи: една формулировка на две повърхности.
+    Таблицата е разписката — читателят вижда медианата и максимума на всяка
+    епоха и може да провери кратността сам, вместо да вярва на прилагателно.
+    Класът е СЪЩИЯТ `zone-table` — компактната методологична таблица е един
+    стил, не втори почти-същия (прецедентът на палитрата, №43).
+    """
+    if not epochs or not epochs.get("epochs"):
+        return ""
+    rows = "".join(
+        f"<tr><td>{_html.escape(e['name_bg'])}</td>"
+        f"<td>{_html.escape(e['label'])}</td>"
+        f"<td>{e['median']:.1f}%</td><td>{e['max']:.1f}%</td>"
+        f"<td>{e['n']}</td></tr>"
+        for e in epochs["epochs"]
+    )
+    return f"""
+    <p>
+      <b>Наемите се четат през епохи, не срещу една норма.</b> Границите са
+      <b>декларация</b> (спокойната · кризисната · текущата, отворена отдясно),
+      а числата в тях се <b>смятат</b> от самата серия при всяко генериране —
+      затова прочитът се сменя сам, без някой да пипа текст. Претенциите са
+      условни: „над медианата на кризисната епоха" се произнася само когато
+      стойността наистина е над нея.
+    </p>
+    <p>{_html.escape(epochs['sentence'])}</p>
+    <table class="zone-table">
+      <thead><tr><th>Епоха</th><th>Период</th><th>Медиана г/г</th>
+      <th>Макс г/г</th><th>Месеци</th></tr></thead>
+      <tbody>{rows}</tbody>
+    </table>"""
 
 
 def methodology_sections(history=None, housing=None) -> str:

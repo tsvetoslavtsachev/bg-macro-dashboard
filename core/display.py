@@ -14,8 +14,10 @@ Public API:
     thin_window_note(percentile_window)  → обяснението зад ⚠ при къс прозорец
     verdict_sentence(lens_reports)       → „Тежи X (n), крепи Y (m)."
     inflation_anchor(value)              → котвеният прочит: пп от целта + зона
+    epoch_label(start, end)              → „2021-23" / „2024-сега" от границите
     perceived_inflation_reading(series)  → усещаната инфлация + епохалният ѝ контекст
     inflation_voices(snapshot)           → двата гласа, готови за двете повърхности
+    rents_epochs_reading(series)         → наемите през трите сравними епохи
     housing_hypotheses(snapshot)         → двете хипотези за жилищния бум, с ЖИВИ числа
 """
 from __future__ import annotations
@@ -31,9 +33,12 @@ from catalog.series import SERIES_CATALOG
 from config import (
     ECB_DATA_PORTAL,
     ECB_SEARCH,
+    EPOCH_NAMES_BG,
+    EPOCHS,
     EUROSTAT_DATABROWSER,
     INFLATION_ANCHOR_COLORS,
     LENS_SUBJECTS_BG,
+    POST_HYPERINFLATION_END,
     STALE_AFTER_MONTHS,
 )
 from core.primitives import apply_transform
@@ -208,9 +213,11 @@ ANCHOR_KEYS = ("BG_HICP", "BG_HICP_CORE")
 HEADLINE_ANCHOR_KEY = "BG_HICP"
 
 # Контекстната серия + епохата, спрямо която се чете (инфлационната криза).
+# ⚠ Мандат №55: границите вече ЖИВЕЯТ в `config.EPOCHS`. Двете имена долу
+# остават като ТЪНКИ ПСЕВДОНИМИ — нищо не се чупи по import, но литералът е
+# един за целия дашборд.
 PERCEIVED_KEY = "BG_INFL_PERCEIVED"
-CRISIS_EPOCH_START = "2021-01-01"
-CRISIS_EPOCH_END = "2023-12-31"
+CRISIS_EPOCH_START, CRISIS_EPOCH_END = EPOCHS["crisis"]
 
 
 def fmt_target(target: float) -> str:
@@ -270,12 +277,23 @@ def inflation_anchor(value: Optional[float], target: float = INFLATION_TARGET) -
     }
 
 
-def crisis_epoch_label(
-    start: str = CRISIS_EPOCH_START, end: str = CRISIS_EPOCH_END
+def epoch_label(
+    start: str = CRISIS_EPOCH_START, end: Optional[str] = CRISIS_EPOCH_END
 ) -> str:
-    """`2021-01-01`, `2023-12-31` → „2021-23" — етикетът се ИЗВЕЖДА, не се зашива."""
-    a, b = pd.Timestamp(start), pd.Timestamp(end)
+    """`2021-01-01`, `2023-12-31` → „2021-23" — етикетът се ИЗВЕЖДА, не се зашива.
+
+    ОТВОРЕНАТА епоха (`end=None`, мандат №55) чете „2024-сега": границата ѝ е
+    последното наблюдение, не година, която някой трябва да помни да мести.
+    """
+    a = pd.Timestamp(start)
+    if end is None:
+        return f"{a.year}-сега"
+    b = pd.Timestamp(end)
     return f"{a.year}-{str(b.year)[-2:]}"
+
+
+# Старото име (мандат №48) — тънък псевдоним, за да не се чупи нито един import.
+crisis_epoch_label = epoch_label
 
 
 def perceived_inflation_reading(
@@ -311,7 +329,7 @@ def perceived_inflation_reading(
         if len(epoch):
             epoch_median = round(float(epoch.median()), 1)
 
-    label = crisis_epoch_label(epoch_start, epoch_end)
+    label = epoch_label(epoch_start, epoch_end)
     at_crisis_levels = epoch_median is not None and value >= epoch_median
 
     parts = [f"Усещаната (ЕК анкета): {value:.1f}"]
@@ -422,8 +440,9 @@ CRISIS_DENOMINATOR_WINDOW = ("2008-07-01", "2010-12-31")
 CRISIS_DENOMINATOR_NOTE = (
     "свит знаменател в кризата 2009-10: съотношението скочи без нов кредит"
 )
-# Спокойната епоха, спрямо която се чете наемният темп.
-CALM_EPOCH = ("2015-01-01", "2019-12-31")
+# Спокойната епоха, спрямо която се чете наемният темп. Псевдоним на
+# `config.EPOCHS["calm"]` от мандат №55 — литералът вече е един за дашборда.
+CALM_EPOCH = EPOCHS["calm"]
 
 # ── РЪЧНАТА СНИМКА, която №54 НЕ дерайва ─────────────────────────────────────
 # Заместващата хипотеза стъпва на съотношението „компенсации срещу цени на
@@ -583,13 +602,160 @@ def credit_gdp_gap(
     }
 
 
+# ═════════════════════════════════════════════════════════════════════════════
+# НАЕМИТЕ ПРЕЗ ЕПОХИТЕ — епохният прочит (мандат №55)
+# ═════════════════════════════════════════════════════════════════════════════
+# До №55 наемите се четяха срещу ЕДНА епоха (спокойната 2015-19) и от това
+# излизаше едно вярно, но полу-изречение: „кратно над спокойната норма". То не
+# казваше кое е ГОРЕЩОТО сравнение — че днешният темп стои НАД медианата на
+# самата инфлационна криза, т.е. наемната инфлация след кризата не спря, а се
+# ускори. Затова прочитът минава през ТРИТЕ сравними епохи наведнъж.
+#
+# Прецедентът е `perceived_inflation_reading` (мандат №48): нула зашити
+# литерали, всяка претенция УСЛОВНА. Ако утре наемите слязат под кризисната
+# медиана, изречението се сменя САМО — никой не пипа код.
+#
+# Уговорката за опашката също е ИЗВЕДЕНА, не зашита: залепя се само когато
+# серията наистина тръгва отпреди края на хиперинфлационната опашка.
+
+# Кои епохи са СРАВНИМИ (редът е редът на четене: норма → криза → днес).
+RENTS_EPOCH_KEYS = ("calm", "crisis", "current")
+
+
+def _epoch_stats(s: pd.Series, key: str, start: str,
+                 end: Optional[str]) -> Optional[dict]:
+    """{key, name_bg, label, median, max, min, n} за един прозорец от серията.
+
+    Отворената епоха (`end is None`) се затваря на ПОСЛЕДНОТО наблюдение, а не
+    на днешната дата — прозорецът е на данните, не на календара.
+    """
+    lo = pd.Timestamp(start)
+    hi = pd.Timestamp(end) if end is not None else s.index[-1]
+    part = s[(s.index >= lo) & (s.index <= hi)]
+    if part.empty:
+        return None
+    return {
+        "key": key,
+        "name_bg": EPOCH_NAMES_BG.get(key, key),
+        "label": epoch_label(start, end),
+        "median": round(float(part.median()), 1),
+        "max": round(float(part.max()), 1),
+        "min": round(float(part.min()), 1),
+        "n": int(len(part)),
+    }
+
+
+def rents_epochs_reading(
+    series: Optional[pd.Series],
+    *,
+    epochs: Optional[dict] = None,
+    tail_end: str = POST_HYPERINFLATION_END,
+) -> Optional[dict]:
+    """Наемите през трите сравними епохи — детерминистично от самата серия.
+
+    Връща `{value, last_date, n, epochs, by_key, claims, tail, sentence}`.
+    Медианите и максимумите се СМЯТАТ, етикетите се ИЗВЕЖДАТ от границите.
+
+    Претенциите са УСЛОВНИ (кодирана честност, прецедентът на „нива като
+    2021-23"):
+      · „над медианата на кризисната епоха" — САМО ако `value ≥` тази медиана;
+        иначе изречението казва „под“ и думите „над медианата“ ги няма;
+      · кратността спрямо спокойната се СМЯТА от показваните (закръглени) числа,
+        за да може читателят да я провери сам, и носи „над" само когато е ≥1;
+      · откатът от върха на текущата епоха е ОПИСАТЕЛЕН (`value < epoch max`).
+
+    Уговорката за следхиперинфлационната опашка се залепя само ако серията
+    наистина тръгва отпреди `tail_end` — серия от 2005 нататък не я носи.
+    """
+    if series is None or len(series) == 0:
+        return None
+    s = series.dropna()
+    if s.empty or not isinstance(s.index, pd.DatetimeIndex):
+        return None
+
+    epochs = EPOCHS if epochs is None else epochs
+    value = float(s.iloc[-1])
+    rows = [
+        st for st in (
+            _epoch_stats(s, key, *epochs[key])
+            for key in RENTS_EPOCH_KEYS if key in epochs
+        ) if st is not None
+    ]
+    by_key = {st["key"]: st for st in rows}
+    calm, crisis, current = (by_key.get(k) for k in ("calm", "crisis", "current"))
+
+    above_crisis = crisis is not None and value >= crisis["median"]
+    multiple = None
+    if calm is not None and calm["median"] > 0:
+        multiple = round(round(value, 1) / calm["median"], 1)
+    at_peak = current is not None and round(value, 1) >= current["max"]
+
+    # ── Опашката: уговорка, не епоха ─────────────────────────────────────────
+    tail = None
+    tail_ts = pd.Timestamp(tail_end)
+    if s.index[0] <= tail_ts:
+        part = s[s.index <= tail_ts]
+        tail = {
+            "label": f"{s.index[0].year}-{tail_ts.year}",
+            "median": round(float(part.median()), 1),
+            "max": round(float(part.max()), 1),
+            "n": int(len(part)),
+            "note": (
+                f"⚠ Опашката {s.index[0].year}-{tail_ts.year} (макс "
+                f"{float(part.max()):.1f}% г/г) е следхиперинфлационна и НЕ "
+                f"влиза в сравненията."
+            ),
+        }
+
+    parts = [f"Наемите: {value:.1f}% г/г ({s.index[-1].strftime('%Y-%m')})"]
+    if crisis is not None:
+        where = "над" if above_crisis else "под"
+        parts.append(
+            f" — {where} медианата на {crisis['name_bg']} епоха "
+            f"{crisis['label']} ({crisis['median']:.1f}%)"
+        )
+    if multiple is not None:
+        rel = "над" if multiple >= 1 else "спрямо"
+        parts.append(
+            f"; {multiple:.1f}× {rel} {calm['name_bg']} {calm['label']} "
+            f"({calm['median']:.1f}%)"
+        )
+    if current is not None:
+        where = "на върха на" if at_peak else "с откат от върха на"
+        parts.append(
+            f"; {where} {current['name_bg']} епоха {current['label']} "
+            f"({current['max']:.1f}%)"
+        )
+    parts.append(".")
+    if tail is not None:
+        parts.append(f" {tail['note']}")
+
+    return {
+        "key": HOUSING_RENTS_KEY,
+        "value": round(value, 1),
+        "last_date": s.index[-1].strftime("%Y-%m"),
+        "n": int(len(s)),
+        "epochs": rows,
+        "by_key": by_key,
+        "claims": {
+            "above_crisis_median": bool(above_crisis),
+            "multiple_of_calm": multiple,
+            "at_current_peak": bool(at_peak),
+            "off_current_peak": bool(current is not None and not at_peak),
+        },
+        "tail": tail,
+        "sentence": "".join(parts),
+    }
+
+
 def rents_reading(
     snapshot: dict, catalog: Optional[dict] = None
 ) -> Optional[dict]:
     """Наемите срещу спокойната си норма — дискриминаторът на заместващата.
 
-    Медианата на спокойната епоха се СМЯТА от серията; „кратно над" се твърди
-    само когато числата го дават.
+    ⚠ Мандат №55: спокойната медиана НЕ се смята повторно тук. Тя идва от
+    `rents_epochs_reading` — ЕДИН източник, за да не могат хипотезният ред и
+    епохният прочит да се разминат по число, докато стоят на едно лице.
     """
     catalog = SERIES_CATALOG if catalog is None else catalog
     spec = catalog.get(HOUSING_RENTS_KEY)
@@ -599,11 +765,14 @@ def rents_reading(
     if s.empty:
         return None
 
+    epochs = rents_epochs_reading(s)
+    if epochs is None:
+        return None
+
     value = float(s.iloc[-1])
-    lo, hi = CALM_EPOCH
-    calm = s[(s.index >= pd.Timestamp(lo)) & (s.index <= pd.Timestamp(hi))]
-    calm_median = round(float(calm.median()), 1) if len(calm) else None
-    label = crisis_epoch_label(lo, hi)
+    calm = (epochs["by_key"] or {}).get("calm")
+    calm_median = calm["median"] if calm else None
+    label = calm["label"] if calm else epoch_label(*CALM_EPOCH)
     cooling = calm_median is not None and value <= calm_median
 
     reading = f"наемите растат с {value:.1f}% г/г"
@@ -619,13 +788,11 @@ def rents_reading(
         "key": HOUSING_RENTS_KEY,
         "value": round(value, 1),
         "reading": reading,
-        "last_date": (
-            s.index[-1].strftime("%Y-%m")
-            if isinstance(s.index, pd.DatetimeIndex) else str(s.index[-1])
-        ),
+        "last_date": epochs["last_date"],
         "calm_median": calm_median,
         "calm_label": label,
         "cooling": bool(cooling),
+        "epochs": epochs,
         "sentence": "".join(parts),
     }
 
@@ -727,10 +894,14 @@ def housing_hypotheses(
 ) -> dict:
     """Двете хипотези за кредитно-жилищния бум, готови за ДВЕТЕ повърхности.
 
-    Връща `{"ratio", "gap", "rents", "hypotheses", "revision", "equivalence",
-    "available"}`. Методологичната страница и `briefing_context` ЦИТИРАТ оттук
-    (ФОРМА-КАНОН: един източник), затова не могат да се разминат по число или
-    по формулировка.
+    Връща `{"ratio", "gap", "rents", "rents_epochs", "hypotheses", "revision",
+    "equivalence", "available"}`. Методологичната страница и `briefing_context`
+    ЦИТИРАТ оттук (ФОРМА-КАНОН: един източник), затова не могат да се разминат
+    по число или по формулировка.
+
+    `rents_epochs` (мандат №55) е СЪЩИЯТ обект, който виси и вътре в `rents` —
+    изнесен на върха само за да го четат повърхностите на едно ниво. Не е втора
+    сметка: спокойната медиана в наемния ред ИДВА оттам.
     """
     catalog = SERIES_CATALOG if catalog is None else catalog
 
@@ -743,6 +914,7 @@ def housing_hypotheses(
         "ratio": ratio,
         "gap": gap,
         "rents": rents,
+        "rents_epochs": (rents or {}).get("epochs"),
         "hypotheses": [
             _substitution_hypothesis(rents),
             _leverage_hypothesis(ratio, gap),
