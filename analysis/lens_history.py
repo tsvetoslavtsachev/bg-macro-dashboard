@@ -307,12 +307,73 @@ def _normalize_history(df: pd.DataFrame) -> pd.DataFrame:
 # ═════════════════════════════════════════════════════════════════════════════
 # ЗАПИС
 # ═════════════════════════════════════════════════════════════════════════════
+# Каноничният запис (чип-билетът на Ц., 29.07.2026; лечение по №44 price_guard
+# прецедента). `build_history` не е бит-стабилен между среди — последно-цифрен
+# float jitter в z-клетките (локален пуск срещу CI) влачеше шумни parquet
+# диффове в понеделнишките комити без промяна по същество. Лекът е в ЗАПИСА,
+# не в уреда (in-memory числата остават пълна точност, гейтът бит-в-бит стои):
+#   ROUND    — float колоните се закръглят до канонична точност при запис;
+#              jitter-ът е ~1e-15 и закръглянето го убива изцяло;
+#   DEADBAND — ако съществуващият файл носи същите ПО СЪЩЕСТВО стойности
+#              (в допуска), старите байтове остават — така не мърдат и pyarrow
+#              метаданните между версии/среди. Материална промяна → пълен запис.
+
+ROUND_DECIMALS = 4
+DEADBAND_EPS = 1e-3      # материалностният праг на №44: под него е закръгление
+
+
+def _float_columns() -> list[str]:
+    """Float колоните на решетката — тези, които ROUND/DEADBAND третират."""
+    lenses = _lens_order()
+    return (["composite"] + [f"z_{l}" for l in lenses]
+            + [f"score_{l}" for l in lenses] + ["k1_ratio"])
+
+
+def _round_history(df: pd.DataFrame) -> pd.DataFrame:
+    """Каноничната точност на записа (`ROUND_DECIMALS`); df-ът не се мутира."""
+    df = df.copy()
+    for col in _float_columns():
+        df[col] = df[col].round(ROUND_DECIMALS)
+    return df
+
+
+def _within_deadband(existing: pd.DataFrame, canon: pd.DataFrame) -> bool:
+    """Еднакви по същество: форма/индекс точно · float в допуска · останалото точно."""
+    if existing.shape != canon.shape or not existing.index.equals(canon.index):
+        return False
+    if list(existing.columns) != list(canon.columns):
+        return False
+    float_cols = set(_float_columns())
+    for col in canon.columns:
+        a, b = existing[col], canon[col]
+        if col in float_cols:
+            if not (a.isna() == b.isna()).all():
+                return False
+            if not ((a - b).abs().fillna(0.0) <= DEADBAND_EPS).all():
+                return False
+        elif not a.equals(b):
+            return False
+    return True
+
 
 def write_history(df: pd.DataFrame, path: Path | str = HISTORY_PATH) -> str:
-    """Решетката → parquet (pyarrow). Идемпотентен: същият df → същите байтове."""
+    """Решетката → parquet (pyarrow), в каноничната точност.
+
+    Идемпотентен И бит-стабилен: същият df → същите байтове, а пуск от друга
+    среда със същите по същество стойности (в `DEADBAND_EPS`) оставя старите
+    байтове недокоснати. Файлът мърда само при материална промяна.
+    """
     out = Path(path)
     out.parent.mkdir(parents=True, exist_ok=True)
-    _normalize_history(df).to_parquet(out, engine="pyarrow", index=True)
+    canon = _round_history(_normalize_history(df))
+    if out.exists():
+        try:
+            existing = _normalize_history(pd.read_parquet(out, engine="pyarrow"))
+        except Exception:
+            existing = None
+        if existing is not None and _within_deadband(existing, canon):
+            return str(out)
+    canon.to_parquet(out, engine="pyarrow", index=True)
     return str(out)
 
 

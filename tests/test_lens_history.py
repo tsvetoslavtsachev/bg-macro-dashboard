@@ -307,10 +307,64 @@ def test_two_writes_produce_byte_identical_files(live_history, tmp_path):
     assert a.read_bytes() == b.read_bytes()
 
 
-def test_written_history_round_trips(live_history, tmp_path):
+def test_written_history_round_trips_in_the_canonical_precision(live_history, tmp_path):
+    """Round-trip пази КАНОНА: записът е в `ROUND_DECIMALS` (чипът 29.07).
+
+    Уредът (in-memory) остава пълна точност — закръгля се само ЗАПИСЪТ, затова
+    сравнението е срещу закръглената история, не срещу суровата.
+    """
     path = tmp_path / "h.parquet"
     write_history(live_history, path)
-    assert_frame_equal(lens_history.load_history(path), live_history)
+    assert_frame_equal(lens_history.load_history(path),
+                       lens_history._round_history(live_history))
+
+
+def test_a_jitter_sized_wiggle_keeps_the_old_bytes(live_history, tmp_path):
+    """Сърцето на чипа 29.07: последно-цифрен jitter НЕ ражда нов файл.
+
+    Симулира пуск от друга среда: същите стойности по същество, разлика 1e-9
+    (магнитудът на реалния jitter от CI комитите, ~7 z-клетки) — байтовете на
+    файла остават НЕПРОМЕНЕНИ, git не вижда нищо.
+    """
+    path = tmp_path / "h.parquet"
+    write_history(live_history, path)
+    before = path.read_bytes()
+
+    wiggled = live_history.copy()
+    wiggled["z_growth"] = wiggled["z_growth"] + 1e-9
+    write_history(wiggled, path)
+    assert path.read_bytes() == before
+
+
+def test_a_sub_material_difference_keeps_the_old_bytes(live_history, tmp_path):
+    """И разлика, която оцелява закръглянето, но е под материалния праг
+    (`DEADBAND_EPS`, №44 прецедента), пази старите байтове."""
+    path = tmp_path / "h.parquet"
+    write_history(live_history, path)
+    before = path.read_bytes()
+
+    wiggled = live_history.copy()
+    wiggled["composite"] = wiggled["composite"] + 2e-4
+    write_history(wiggled, path)
+    assert path.read_bytes() == before
+
+
+def test_a_material_change_rewrites_the_file(live_history, tmp_path):
+    """DEADBAND-ът не е бетон: материална промяна стига до диска."""
+    path = tmp_path / "h.parquet"
+    write_history(live_history, path)
+    before = path.read_bytes()
+
+    changed = live_history.copy()
+    changed.loc[changed.index[-1], "composite"] = (
+        float(changed["composite"].iloc[-1]) + 0.1
+    )
+    write_history(changed, path)
+    assert path.read_bytes() != before
+    stored = lens_history.load_history(path)
+    assert stored["composite"].iloc[-1] == pytest.approx(
+        live_history["composite"].iloc[-1] + 0.1, abs=1e-9
+    )
 
 
 # ═════════════════════════════════════════════════════════════════════════════

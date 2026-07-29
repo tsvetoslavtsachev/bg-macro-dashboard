@@ -42,25 +42,62 @@ def test_context_file_is_written(context):
     assert "**Дата:** 2026-07-24" in text
 
 
-def test_context_stays_compact_like_the_china_model(context):
+@pytest.fixture(scope="module")
+def live_context(tmp_path_factory):
+    """Живият експорт 1:1 по `run.py::cmd_export_context` — от комитнатия кеш,
+    с ВСИЧКИ живи секции (историята + WoW от журнала + температурата +
+    тензията). Нула мрежови заявки; датата е пинната за детерминизъм.
+    """
+    from analysis.lens_history import build_history, load_journal, wow_delta
+    from analysis.temperature import temperature
+    from analysis.tension import annihilation
+    from catalog.series import series_by_source
+    from sources import build_adapters
+    from sources.manual_seed import splice_loans
+
+    snapshot = {}
+    for source_name, adapter in build_adapters().items():
+        keys = [spec["_key"] for spec in series_by_source(source_name)]
+        snapshot.update(adapter.get_snapshot(keys))
+    if len(snapshot) < len(SERIES_CATALOG):
+        pytest.skip("кешът в data/ е непълен — тестът иска комитнатия кеш")
+    snapshot = splice_loans(snapshot)
+
+    reports = compute_lens_reports(SERIES_CATALOG, snapshot)
+    composite = compute_composite_score({l: r["score"] for l, r in reports.items()})
+    out = tmp_path_factory.mktemp("live_ctx") / "briefing_context.md"
+    generate_briefing_context(
+        snapshot=snapshot,
+        lens_reports=reports,
+        composite=composite,
+        regime=get_regime(composite),
+        output_path=str(out),
+        today=date(2026, 7, 29),
+        history=build_history(SERIES_CATALOG, snapshot),
+        wow=wow_delta(load_journal()),
+        temp=temperature(SERIES_CATALOG, snapshot),
+        tension=annihilation(reports),
+    )
+    return out.read_text(encoding="utf-8")
+
+
+def test_the_live_context_stays_compact_like_the_china_model(live_context):
     """Компактният фамилен модел — не 44-килобайтовият EU експорт.
 
     Таванът СЛЕДВА броя лещи, компактността остава принципът. При 5 лещи беше
     12 000 (живият файл ~11 100). Мандат №43 добавя шеста лещова секция + двете
-    ѝ бележки за качеството → живият файл е ~14 300, фикстурата ~14 200.
-    Мандат №45 добавя секцията „Композитът през времето" (етикет + WoW блок +
-    годишната таблица ~22 реда) и разширената външна бележка → таванът се вдига
-    на 18 000. Мандати №47 (температурната секция + пренаписаните бум-бележки)
-    и №48 (котвеният блок + двете инфлационни бележки) заедно → 22 000.
-    Мандат №50 (седмата лещова секция + двете фискални бележки) → 28 000
+    ѝ бележки за качеството → 14 300. Мандат №45 добавя секцията „Композитът
+    през времето" → 18 000. Мандати №47 (температурата) и №48 (котвите) заедно
+    → 22 000. Мандат №50 (седмата леща + фискалните бележки) → 28 000
     (чекър-фикс при проверяващия: изпълнителят имаше забрана да пипа тавана).
-    ⚠ ИЗВЕСТНА ДУПКА, лекува се в отделен билет: този тест мери ФИКСТУРА без
-    пълните живи секции — живият файл е по-голям и таванът не го пази. Духът е
-    СЪЩИЯТ: тревога, не бюджет — числото е там, за да ГРЪМНЕ при следващото
+    Дупката от №50 („тестът мери фикстура, живият файл не се пази") е ЗАТВОРЕНА
+    с чип-билета на Ц. 29.07.2026: мери се ЖИВИЯТ състав — комитнатият кеш +
+    всички живи секции, 1:1 по `run.py::cmd_export_context`; живият файл на
+    29.07 (№51 тензията + №52 каталога) е ~35 300 байта → таван 40 000. Духът
+    е СЪЩИЯТ: тревога, не бюджет — числото е там, за да ГРЪМНЕ при следващото
     сериозно раздуване, а не да се вдига по навик.
     """
-    text, _, _ = context
-    assert len(text.encode("utf-8")) < 28_000
+    assert len(live_context.encode("utf-8")) < 40_000
 
 
 def test_context_carries_every_lens(context):
