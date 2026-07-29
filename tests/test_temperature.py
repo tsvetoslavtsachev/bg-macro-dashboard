@@ -13,9 +13,18 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from analysis.lens_history import build_history
+from analysis import temperature as temperature_mod
+from analysis.lens_history import build_history, history_columns
 from analysis.temperature import (
+    BUBBLE_PAIR_CREDIT,
+    BUBBLE_PAIR_LABEL_BG,
+    BUBBLE_PAIR_PROPERTY,
+    BUBBLE_PAIR_PROVENANCE,
     TEMP_SERIES,
+    bubble_pair,
+    bubble_pair_from_hot,
+    bubble_pair_line,
+    bubble_pair_streak,
     hot_keys_str,
     temp_level,
     temperature,
@@ -244,6 +253,175 @@ def test_the_hot_string_names_the_series_behind_the_count(history):
     calm_row = q.loc["2017-06-01"]
     assert int(calm_row["temp_count"]) == 0
     assert calm_row["temp_hot"] == ""
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# БАЛОННАТА ДВОЙКА (мандат №53) — К3 прероден върху температурата
+# ═════════════════════════════════════════════════════════════════════════════
+
+def _grid(rows: list[tuple[str, str, str]]) -> pd.DataFrame:
+    """[(дата, temp_hot, row_type)] → минимална решетка с верните колони."""
+    records = [
+        {"composite": 50.0, "temp_count": len([p for p in hot.split("+") if p]),
+         "temp_hot": hot, "row_type": row_type}
+        for _, hot, row_type in rows
+    ]
+    df = pd.DataFrame(
+        records, index=pd.DatetimeIndex([r[0] for r in rows], name="date")
+    )
+    return df.reindex(columns=history_columns())
+
+
+def test_the_bubble_pair_representatives_are_the_ones_p4_froze():
+    """Дефиницията е замразена в П4 §5 — не се преизбира по вкус.
+
+    HPI е ЦЕНАТА НА АКТИВА (PERMITS е тръбата — друг въпрос), а двата заема са
+    ЕДИН кредитен сигнал (peer-прецедентът на `lending`).
+    """
+    assert BUBBLE_PAIR_PROPERTY == "BG_HPI"
+    assert set(BUBBLE_PAIR_CREDIT) == {"BG_LOANS_HH", "BG_LOANS_NFC"}
+    # Представителите са ЧАСТ от бум-сериите — иначе двойката би четяла ключ,
+    # който термометърът никога не пали.
+    for key in (BUBBLE_PAIR_PROPERTY, *BUBBLE_PAIR_CREDIT):
+        assert key in TEMP_SERIES, key
+    assert "BG_PERMITS" not in (BUBBLE_PAIR_PROPERTY, *BUBBLE_PAIR_CREDIT)
+
+
+def test_the_bubble_pair_needs_both_sides_burning():
+    """Правилото върху стринга на решетката: имоти И поне един заем."""
+    assert bubble_pair_from_hot("") is False
+    assert bubble_pair_from_hot(None) is False
+    assert bubble_pair_from_hot("BG_HPI") is False
+    assert bubble_pair_from_hot("BG_LOANS_HH") is False
+    assert bubble_pair_from_hot("BG_LOANS_HH+BG_LOANS_NFC") is False
+    assert bubble_pair_from_hot("BG_WAGES+BG_PERMITS") is False
+
+    assert bubble_pair_from_hot("BG_HPI+BG_LOANS_NFC") is True
+    assert bubble_pair_from_hot("BG_LOANS_NFC+BG_HPI") is True      # обърнат ред
+    assert bubble_pair_from_hot("BG_WAGES+BG_LOANS_HH+BG_HPI") is True
+
+
+def test_the_bubble_pair_and_the_grid_column_agree_by_construction(cache_snapshot):
+    """Двата пътя са ЕДНО правило — иначе лицето и решетката биха се разминали."""
+    for at in (None, pd.Timestamp("2007-06-01"), pd.Timestamp("2017-06-01")):
+        temp = temperature(SERIES_CATALOG, cache_snapshot, at=at)
+        assert bubble_pair(temp)["active"] == bubble_pair_from_hot(hot_keys_str(temp))
+
+
+def test_the_bubble_pair_names_which_side_burns():
+    snap = _synthetic({"BG_LOANS_HH": 21.0, "BG_HPI": 14.8, "BG_WAGES": 11.5})
+    pair = bubble_pair(temperature(SERIES_CATALOG, snap))
+
+    assert pair["active"] is True
+    assert pair["burning"] == ["BG_HPI", "BG_LOANS_HH"]     # имоти → кредит
+    assert pair["label_bg"] == BUBBLE_PAIR_LABEL_BG
+    assert pair["sentence"].startswith(f"{BUBBLE_PAIR_LABEL_BG}: АКТИВНА")
+    for key in pair["burning"]:
+        assert SERIES_CATALOG[key]["name_bg"] in pair["sentence"]
+    # Заплатите горят, но не са от двойката — не влизат нито в едното, нито в
+    # другото.
+    assert "BG_WAGES" not in pair["burning"]
+
+
+def test_one_burning_side_is_diagnostics_not_an_activation():
+    """Само цените (без кредита) → неактивна, но горящата страна се вижда."""
+    pair = bubble_pair(temperature(SERIES_CATALOG, _synthetic({"BG_HPI": 14.8})))
+    assert pair["active"] is False
+    assert pair["burning"] == ["BG_HPI"]
+    assert pair["sentence"] == f"{BUBBLE_PAIR_LABEL_BG}: неактивна"
+
+
+def test_an_empty_thermometer_leaves_the_pair_inactive():
+    for temp in (None, {}, temperature(SERIES_CATALOG, {})):
+        pair = bubble_pair(temp)
+        assert pair["active"] is False
+        assert pair["burning"] == []
+
+
+def test_the_streak_counts_marks_from_the_end_including_the_live_row():
+    grid = _grid([
+        ("2024-03-01", "BG_HPI+BG_LOANS_HH", "quarter"),   # прекъснат по-рано
+        ("2024-06-01", "BG_HPI", "quarter"),
+        ("2024-09-01", "BG_HPI+BG_LOANS_NFC", "quarter"),
+        ("2024-12-01", "BG_WAGES+BG_LOANS_HH+BG_HPI", "quarter"),
+        ("2025-03-01", "BG_HPI+BG_LOANS_HH", "live"),
+    ])
+    streak = bubble_pair_streak(grid)
+    assert streak == {"n": 3, "since": "2024-09-01"}
+
+
+def test_the_streak_is_zero_when_today_is_inactive():
+    """Прекъсната вчера серия НЕ е текуща — не се показва като такава."""
+    grid = _grid([
+        ("2024-09-01", "BG_HPI+BG_LOANS_HH", "quarter"),
+        ("2024-12-01", "BG_HPI+BG_LOANS_HH", "quarter"),
+        ("2025-03-01", "BG_WAGES", "live"),
+    ])
+    assert bubble_pair_streak(grid) == {"n": 0, "since": None}
+    assert bubble_pair_streak(None) == {"n": 0, "since": None}
+    assert bubble_pair_streak(pd.DataFrame()) == {"n": 0, "since": None}
+
+
+def test_the_line_carries_the_sentence_untouched_plus_the_persistence():
+    pair = {"active": True, "burning": ["BG_HPI"], "label_bg": BUBBLE_PAIR_LABEL_BG,
+            "sentence": "изречението"}
+    line = bubble_pair_line(pair, {"n": 11, "since": "2023-12-01"})
+    assert line == "изречението, от 2023-12-01 (11 поредни марка)"
+    # Неактивна двойка не носи опашка, а празният вход не ражда празен ред.
+    off = {"active": False, "burning": [], "label_bg": BUBBLE_PAIR_LABEL_BG,
+           "sentence": "неактивна"}
+    assert bubble_pair_line(off, {"n": 0, "since": None}) == "неактивна"
+    assert bubble_pair_line(pair, None) == "изречението"
+    assert bubble_pair_line(None) == ""
+
+
+def test_the_old_k3_label_stays_retired():
+    """П4 присъдата: етикетът „≥2 двойки" НЕ се възкресява в никаква форма."""
+    public = [name for name in dir(temperature_mod) if not name.startswith("_")]
+    assert not [n for n in public if "k3" in n.lower()]
+    assert "ТЕНЗИЯ" not in bubble_pair(None)["sentence"]
+    assert "≥2" not in bubble_pair(None)["sentence"]
+    # Провенансът КАЗВА, че старият етикет е пенсиониран — иначе следващият
+    # читател би го помислил за пропуск.
+    assert "ПЕНСИОНИРАН" in BUBBLE_PAIR_PROVENANCE
+    assert "8/8" in BUBBLE_PAIR_PROVENANCE and "0/20" in BUBBLE_PAIR_PROVENANCE
+
+
+def test_the_bubble_pair_acceptance_gate(history):
+    """ГЕЙТЪТ-ЗВЕЗДА на мандат №53 — смятан от `temp_hot` на ЖИВАТА решетка.
+
+    8/8 активни марка в бум-прозореца 2007-2008 · 0 от 20-те в спокойните
+    2015-2019 · живият ред ДНЕС активен (жива котва 29.07.2026: цените на
+    жилищата + кредитът за домакинствата). НЕ от снимка и НЕ от П4 CSV-тата —
+    ако този тест падне, прероденият К3 вече не мери съ-прегряване.
+    """
+    q = _quarters(history)
+    boom = q.loc["2007-01-01":"2008-12-31", "temp_hot"].map(bubble_pair_from_hot)
+    calm = q.loc["2015-01-01":"2019-12-31", "temp_hot"].map(bubble_pair_from_hot)
+
+    assert len(boom) == 8
+    assert int(boom.sum()) == 8, "бумът трябва да гори ЦЯЛ, не да мигне"
+    assert len(calm) == 20
+    assert int(calm.sum()) == 0, "спокойната епоха трябва да МЪЛЧИ"
+
+    live = history[history["row_type"] == "live"].iloc[-1]
+    assert bubble_pair_from_hot(live["temp_hot"]) is True
+
+
+def test_the_live_pair_is_active_and_persistent(cache_snapshot, history):
+    """Живата котва: двойката гори, а персистенцията се брои в МАРКОВЕ."""
+    pair = bubble_pair(temperature(SERIES_CATALOG, cache_snapshot))
+    assert pair["active"] is True
+    assert pair["burning"] == ["BG_HPI", "BG_LOANS_HH"]
+
+    streak = bubble_pair_streak(history)
+    assert streak["n"] >= 1
+    assert bubble_pair_from_hot(history.loc[pd.Timestamp(streak["since"]), "temp_hot"])
+    # Марк ПРЕДИ началото на серията (ако има такъв) трябва да е неактивен —
+    # иначе `since` не е първият от поредицата.
+    earlier = history.loc[history.index < pd.Timestamp(streak["since"]), "temp_hot"]
+    if len(earlier):
+        assert bubble_pair_from_hot(earlier.iloc[-1]) is False
 
 
 def test_the_temperature_has_no_look_ahead():

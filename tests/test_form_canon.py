@@ -392,6 +392,59 @@ def test_html_film_carries_the_temperature_band(rendered_with_temp):
     assert 'yaxis: "y2"' in html
 
 
+# ── Мандат №53: балонната двойка в температурната лента ──────────────────────
+
+def test_html_film_carries_the_bubble_pair_row(rendered_with_temp):
+    """Редът под филма носи ТОЧНО изречението от `bubble_pair()` (един източник)."""
+    from analysis.temperature import bubble_pair
+
+    html, temp = rendered_with_temp
+    sentence = bubble_pair(temp)["sentence"]
+
+    assert bubble_pair(temp)["active"] is True
+    assert 'class="film-temp-note bubble-row bubble-on"' in html
+    assert _html.escape(sentence) in html
+    # Имената идват от каталога — редът говори на български, не с ключове.
+    for key in ("BG_HPI", "BG_LOANS_HH"):
+        assert SERIES_CATALOG[key]["name_bg"] in sentence, key
+    # Персистенцията се брои в МАРКОВЕ и го КАЗВА — не в „тримесечия".
+    assert "поредни марка" in html
+
+
+def test_the_bubble_row_carries_the_p4_provenance_in_the_tooltip(rendered_with_temp):
+    """Числото не пътува без произхода си: 8/8 · 0/20 · старият К3 пенсиониран."""
+    from analysis.temperature import BUBBLE_PAIR_PROVENANCE
+
+    html, _ = rendered_with_temp
+    assert _html.escape(BUBBLE_PAIR_PROVENANCE) in html
+    for token in ("8/8", "0/20", "ПЕНСИОНИРАН", "НЕ прогноза"):
+        assert token in BUBBLE_PAIR_PROVENANCE, token
+
+
+def test_the_bubble_row_is_absent_without_a_thermometer(rendered):
+    """Стар пуск без температура не рисува празен ред."""
+    from export.weekly_briefing import _bubble_pair_html
+
+    assert 'class="film-temp-note bubble-row' not in rendered
+    assert _bubble_pair_html(None) == ""
+    assert _bubble_pair_html({"n_hot": 0, "n_total": 0, "hot": []}) == ""
+
+
+def test_the_inactive_bubble_row_says_so_instead_of_disappearing(tmp_path):
+    """Неактивна двойка е ОТГОВОР, не липса — редът стои, но в сдържан клас."""
+    from analysis.temperature import temperature
+    from export.weekly_briefing import _bubble_pair_html
+
+    idx = pd.date_range(end="2026-06-01", periods=300, freq="MS")
+    snapshot = {key: pd.Series([1.0, 3.0] * 150, index=idx) for key in SERIES_CATALOG}
+    snapshot["BG_HPI"] = pd.Series([14.8] * 300, index=idx)   # гори САМО цената
+    row = _bubble_pair_html(temperature(SERIES_CATALOG, snapshot))
+
+    assert "bubble-off" in row
+    assert "неактивна" in row
+    assert "поредни марка" not in row
+
+
 def test_the_film_band_colours_come_from_python_not_js():
     """Нула аритметика в JS — стойността И цветът на всеки бар идват готови."""
     from analysis.lens_history import history_columns

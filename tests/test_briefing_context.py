@@ -611,6 +611,54 @@ def test_context_without_a_temperature_skips_the_section(context):
     assert "## Температурният слой" not in text
 
 
+# ── Мандат №53: балонната двойка в температурната секция ─────────────────────
+
+def test_context_carries_the_bubble_pair_sentence_verbatim(context_with_temperature):
+    """Един източник: експортът ЦИТИРА `bubble_pair()`, не преписва."""
+    from analysis.temperature import bubble_pair
+
+    text, temp = context_with_temperature
+    pair = bubble_pair(temp)
+
+    assert pair["active"] is True
+    assert pair["sentence"] in text
+
+
+def test_the_bubble_pair_reads_after_who_burns_and_before_the_tension(
+    context_with_temperature,
+):
+    """Редът на четене: какво гори → съ-прегряване → (после) кой кого изяжда."""
+    from analysis.temperature import bubble_pair
+
+    text, temp = context_with_temperature
+    assert (text.index("**Кои горят сега:**")
+            < text.index(bubble_pair(temp)["sentence"])
+            < text.index("**Зоните и откъде идват праговете:**"))
+
+
+def test_the_bubble_pair_carries_its_provenance_next_to_the_reading(
+    context_with_temperature,
+):
+    from analysis.temperature import BUBBLE_PAIR_PROVENANCE
+
+    text, _ = context_with_temperature
+    assert BUBBLE_PAIR_PROVENANCE in text
+
+
+def test_the_quality_notes_carry_the_bubble_pair_definition_and_p4_numbers():
+    """Уговорката пътува с числото: дефиниция · 8/8 · 0/20 · пенсионираният К3."""
+    joined = " ".join(DATA_QUALITY_NOTES)
+
+    assert "Балонната двойка (мандат №53)" in joined
+    assert "`BG_HPI` е в `temp_hot`" in joined
+    for token in ("8/8", "0/20", "25", "2007-08", "2015-19"):
+        assert token in joined, token
+    assert "ПЕНСИОНИРАН" in joined
+    assert "0 пъти на 83 реда" in joined
+    assert "29.07.2026" in joined
+    assert "прогноза" in joined
+
+
 def test_lens_rows_do_not_borrow_the_composite_regime_vocabulary(context):
     """„Инфлация — РЕЦЕСИОНЕН" е безсмислица; лещата носи лента, не режим."""
     text, _, _ = context

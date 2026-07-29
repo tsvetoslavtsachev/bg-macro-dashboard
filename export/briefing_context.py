@@ -18,7 +18,14 @@ from typing import Optional
 import math
 
 from analysis.lens_history import HONESTY_LABEL, history_stats, yearly_table
-from analysis.temperature import TEMP_SERIES, zone_table
+from analysis.temperature import (
+    BUBBLE_PAIR_PROVENANCE,
+    TEMP_SERIES,
+    bubble_pair,
+    bubble_pair_line,
+    bubble_pair_streak,
+    zone_table,
+)
 from analysis.tension import (
     AS_OF_NOTE,
     ENERGY_FLOOR,
@@ -199,6 +206,23 @@ DATA_QUALITY_NOTES = [
     "Двата фискални крака са ДВЕ отделни peer-групи (`fiscal_balance` · "
     "`debt`), защото потокът и стокът са различни въпроси — днешната разцепка е "
     "точно тази: остър поток при все още нисък сток.",
+    "**Балонната двойка (мандат №53) е ДИСКРЕТЕН сигнал В температурния слой — "
+    "нула нови прагове.** Дефиницията (замразена в П4 §5): активна е, когато "
+    "`BG_HPI` е в `temp_hot` И поне един от `BG_LOANS_HH` / `BG_LOANS_NFC` е в "
+    "`temp_hot`. Представителите имат провенанс: HPI е ЦЕНАТА НА АКТИВА "
+    "(`BG_PERMITS` е тръбата — друг въпрос), а двата заема дават ЕДИН кредитен "
+    "сигнал (peer-групата `lending`). **Ретро-числата са мерени в П4** "
+    "(`49-P4-TENSION-REPORT.md`, замразената история): **8/8** в бум-прозореца "
+    "2007-08 · **0/20** в спокойните 2015-19 · **25** запалени реда общо. "
+    "**Старият К3 етикет („≥2 двойки“ върху лещови score-ове) е ПЕНСИОНИРАН** — "
+    "П4 го намери изроден (0 пъти на 83 реда) и обърнат (единствените му "
+    "активирания са в спокойните 2015-19); причината е структурна, не програмна: "
+    "мандат №47 премести бум-сигнала от score-овете в температурата. Днес "
+    "(29.07.2026) двойката е **АКТИВНА** — горят `BG_HPI` и `BG_LOANS_HH`, "
+    "докато лещовите им score-ове (62.3 · 40.8) изглеждат кротки; точно тази "
+    "слепота покрива двойката. **Какво НЕ е:** прогноза, етикет на тензия (К1 е "
+    "отделен слой) и присъда коя от двете хипотези за жилищния бум е вярна — тя "
+    "казва само, че цената на актива и кредитът прегряват ЕДНОВРЕМЕННО.",
 ]
 
 
@@ -344,11 +368,15 @@ def _zone_score() -> float:
     return round(50.0 * (1.0 + math.tanh(U_BAND / TANH_SLOPE)), 1)
 
 
-def _temperature_section(temp) -> list[str]:
+def _temperature_section(temp, history=None) -> list[str]:
     """„Температурният слой" — колко бум-серии са над зоната си (мандат №47).
 
     Всяко число идва от `analysis.temperature` и от полярностната карта. Нула
     ръчни константи: праговете и provenance-ът се четат от кода, не се преписват.
+
+    От мандат №53 секцията носи и БАЛОННАТА ДВОЙКА (съ-прегряване
+    имоти↔кредит). Редът ѝ е нарочен: първо КОЕ гори, после СЪ-прегряването,
+    и чак тензионната секция след това казва кой кого изяжда.
     """
     if not temp or not temp.get("n_total"):
         return []
@@ -377,6 +405,15 @@ def _temperature_section(temp) -> list[str]:
         for e in temp["cold"]:
             L.append(f"- {e['name_bg']}: **{e['value']:.1f}** при долен праг "
                      f"{e['lo']:.0f}")
+        L.append("")
+
+    # Балонната двойка (мандат №53) — СЛЕД списъка кой гори, ПРЕДИ тензията.
+    pair = bubble_pair(temp)
+    line = bubble_pair_line(pair, bubble_pair_streak(history))
+    if line:
+        L.append(f"**{line}**")
+        L.append("")
+        L.append(f"⚠ {BUBBLE_PAIR_PROVENANCE}")
         L.append("")
 
     L.append("**Зоните и откъде идват праговете:**")
@@ -513,7 +550,8 @@ def generate_briefing_context(
     L.extend(_history_section(history, wow))
 
     # ── Термометърът: колко бум-серии горят (мандат №47) ─────────────────────
-    L.extend(_temperature_section(temp))
+    #    + балонната двойка (мандат №53) — персистенцията ѝ иска решетката.
+    L.extend(_temperature_section(temp, history))
 
     # ── Тензията: колко от енергията се погасява (мандат №51) ────────────────
     L.extend(_tension_section(tension, history))

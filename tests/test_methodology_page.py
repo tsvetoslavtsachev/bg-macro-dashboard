@@ -46,6 +46,13 @@ FACE_SECTIONS_BEFORE_52 = [
     "Къс прозорец",
 ]
 
+# Секциите, РОДЕНИ на страницата след №52. Списъкът е отделен нарочно: горният
+# пин пази „преместено, не изтрито", този брои прираста поименно — така броят
+# на `<h4>` остава ТОЧЕН, вместо да омекне до „поне толкова".
+SECTIONS_ADDED_AFTER_52 = [
+    "Балонната двойка (съ-прегряване имоти↔кредит)",     # мандат №53
+]
+
 
 @pytest.fixture
 def page(tmp_path):
@@ -79,9 +86,19 @@ def test_the_page_is_generated_as_a_standalone_document(tmp_path):
 
 def test_the_page_carries_every_section_the_face_used_to_carry(page):
     """Преместено, не пренаписано: всяко заглавие от лицето е ТУК."""
-    for title in FACE_SECTIONS_BEFORE_52:
+    for title in FACE_SECTIONS_BEFORE_52 + SECTIONS_ADDED_AFTER_52:
         assert f"<h4>{title}</h4>" in page, title
-    assert page.count("<h4>") == len(FACE_SECTIONS_BEFORE_52)
+    assert page.count("<h4>") == (
+        len(FACE_SECTIONS_BEFORE_52) + len(SECTIONS_ADDED_AFTER_52)
+    )
+
+
+def test_the_bubble_pair_section_sits_with_the_temperature_not_alone(page):
+    """Мандат №53: новият H4 стои МЕЖДУ температурата и тензията — двойката е
+    прочит върху термометъра, не трети независим уред."""
+    assert (page.index("<h4>Оптималните зони и температурата</h4>")
+            < page.index("<h4>Балонната двойка (съ-прегряване имоти↔кредит)</h4>")
+            < page.index("<h4>Тензионният слой"))
 
 
 def test_the_page_leads_back_to_the_dashboard(page):

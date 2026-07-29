@@ -71,6 +71,11 @@
   .temp-warm { background:rgba(255,152,0,0.16);   color:#ff9800; }
   .temp-hot  { background:rgba(239,68,68,0.18);   color:#ef4444; }
   .film-temp-note { color:var(--muted); font-size:0.78em; margin-top:8px; line-height:1.5; }
+
+  /* Балонната двойка: съ-прегряване имоти↔кредит (мандат №53) */
+  .bubble-row { cursor:help; border-left:2px solid transparent; padding-left:10px; }
+  .bubble-on  { color:#ef4444; border-left-color:#ef4444; font-weight:600; }
+  .bubble-off { color:var(--muted); border-left-color:var(--border); }
   .verdict { font-size:1.05em; font-weight:600; color:var(--text); margin-top:10px; max-width:560px; line-height:1.45; }
 
   /* Тензионният ред (мандат №51) */
@@ -202,6 +207,7 @@
       <div>
         <div id="film-chart"></div>
         <div class="film-temp-note" id="film-temp-note"></div>
+        <div class="film-temp-note bubble-row bubble-on" title="П4 ретро-изпит (49-P4-TENSION-REPORT.md, замразената история): двойката свети 8/8 в бум-прозореца 2007-08 и 0/20 в спокойните 2015-19 (25 запалени реда общо). Показанието е сигнал за СЪ-ПРЕГРЯВАНЕ на цената на актива и кредита — НЕ прогноза и НЕ етикет на тензия (К1 е отделен слой). Старият К3 етикет („≥2 двойки“ върху лещови score-ове) е изпитан и ПЕНСИОНИРАН с П4: изроден (0 пъти на 83 реда) и обърнат (единствените му активирания са в СПОКОЙНИТЕ 2015-19). Прероденото стъпва на `temp_hot`, не на score-ове.">🫧 Балонната двойка (имоти↔кредит): АКТИВНА — горят Цени на жилищата (HPI, г/г) + Кредит за домакинствата (г/г), от 2023-12-01 (11 поредни марка)</div>
         <div class="film-temp-note" id="film-tension-note"></div>
       </div>
       <div class="wow-block">

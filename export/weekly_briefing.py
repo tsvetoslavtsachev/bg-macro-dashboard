@@ -23,7 +23,14 @@ from config import (
     MODULE_WEIGHTS,
 )
 from analysis.lens_history import HONESTY_LABEL, ROW_LIVE, ROW_QUARTER
-from analysis.temperature import TEMP_SERIES, temp_level
+from analysis.temperature import (
+    BUBBLE_PAIR_PROVENANCE,
+    TEMP_SERIES,
+    bubble_pair,
+    bubble_pair_line,
+    bubble_pair_streak,
+    temp_level,
+)
 from analysis.tension import (
     AS_OF_NOTE,
     SIX_TO_SEVEN_NOTE,
@@ -308,6 +315,27 @@ def _temp_badge_html(temp) -> str:
     )
 
 
+def _bubble_pair_html(temp, history=None) -> str:
+    """Редът на балонната двойка в температурната лента под филма (мандат №53).
+
+    Изречението идва ГОТОВО от `analysis.temperature` (един източник), тук се
+    решава само дали да го има и какво носи tooltip-ът. Празен вход → няма
+    ред, а не празна рамка (същото правило като при тензионния ред).
+    """
+    if not temp or not temp.get("n_total"):
+        return ""
+    pair = bubble_pair(temp)
+    line = bubble_pair_line(pair, bubble_pair_streak(history))
+    if not line:
+        return ""
+    cls = "bubble-on" if pair["active"] else "bubble-off"
+    return (
+        f'<div class="film-temp-note bubble-row {cls}" '
+        f'title="{_html.escape(BUBBLE_PAIR_PROVENANCE)}">'
+        f'🫧 {_html.escape(line)}</div>'
+    )
+
+
 def _tension_row_html(tension) -> str:
     """Тензионният ред под извода: „⚖ {изречение}" + разписката в tooltip-а.
 
@@ -498,6 +526,7 @@ def generate_html(
     composite_str = _fmt_score(composite)
     temp_badge = _temp_badge_html(temp)
     tension_row = _tension_row_html(tension)
+    bubble_row = _bubble_pair_html(temp, history)
 
     # Палитрата се генерира от ЕДИНИЯ речник в config.py — CSS баджовете тук,
     # линиите и запълването в JS по-долу. Нова леща = един ред в config.
@@ -530,6 +559,7 @@ def generate_html(
       <div>
         <div id="film-chart"></div>
         <div class="film-temp-note" id="film-temp-note"></div>
+        {bubble_row}
         <div class="film-temp-note" id="film-tension-note"></div>
       </div>
       <div class="wow-block">
@@ -564,6 +594,11 @@ def generate_html(
   .temp-warm {{ background:rgba(255,152,0,0.16);   color:{TEMP_COLORS['warm']}; }}
   .temp-hot  {{ background:rgba(239,68,68,0.18);   color:{TEMP_COLORS['hot']}; }}
   .film-temp-note {{ color:var(--muted); font-size:0.78em; margin-top:8px; line-height:1.5; }}
+
+  /* Балонната двойка: съ-прегряване имоти↔кредит (мандат №53) */
+  .bubble-row {{ cursor:help; border-left:2px solid transparent; padding-left:10px; }}
+  .bubble-on  {{ color:{TEMP_COLORS['hot']}; border-left-color:{TEMP_COLORS['hot']}; font-weight:600; }}
+  .bubble-off {{ color:var(--muted); border-left-color:var(--border); }}
   .verdict {{ font-size:1.05em; font-weight:600; color:var(--text); margin-top:10px; max-width:560px; line-height:1.45; }}
 
   /* Тензионният ред (мандат №51) */
