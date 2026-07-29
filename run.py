@@ -129,6 +129,7 @@ def cmd_status(args):
 
 def cmd_briefing(args):
     """Генерира HTML дашборда + обновява историята и живия журнал."""
+    from export.methodology import generate_methodology
     from export.weekly_briefing import generate_html
     from analysis.lens_history import (
         append_journal, build_history, load_journal, wow_delta, write_history,
@@ -153,6 +154,12 @@ def cmd_briefing(args):
     generate_html(snapshot, lens_reports, composite, regime, str(output_file),
                   history=history, wow=wow, temp=temp,
                   tension=annihilation(lens_reports))
+
+    # Двете страници се раждат ЗАЕДНО (мандат №52). Ако методологията се
+    # генерираше отделно, лицето и обяснението му щяха да се разминат тихо —
+    # линкът щеше да води към вчерашния текст.
+    generate_methodology(str(BASE_DIR / "output" / "methodology.html"),
+                         history=history)
     return 0
 
 

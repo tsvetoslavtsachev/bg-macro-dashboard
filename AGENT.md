@@ -5,7 +5,7 @@
 ## Архитектура
 
 ```
-catalog/series.py       → Каталог от 20 серии с metadata (19 скорирани + 1 контекстна)
+catalog/series.py       → Каталог от 21 записа с metadata (19 скорирани + 2 контекстни)
 catalog/polarity.py     → Полярност: +1 / −1 / ("U","target",X) / ("OPT",lo,hi,s)
 analysis/temperature.py → Температурният слой: колко бум-серии са над зоната си (М47)
 sources/eurostat_adapter.py → Eurostat JSON-stat 2.0 клиент с кеш
@@ -18,10 +18,19 @@ core/display.py         → ФОРМА-КАНОН примитиви (линк, 
                           + котвеният прочит на инфлацията и усещаната инфлация (М48)
 analysis/lens_history.py → реконструираната лещова история + живият журнал (М45)
 scripts/build_lens_history.py → ръчният билд на решетката (без журнален запис)
-export/weekly_briefing.py → HTML дашборд с Plotly.js
+export/page_style.py    → ОБЩИЯТ CSS на двете лица — една константа (М52)
+export/weekly_briefing.py → HTML дашборд с Plotly.js → output/index.html
+export/methodology.py   → „Как да четеш този дашборд" → output/methodology.html (М52)
 export/briefing_context.py → Markdown context за LLM (--export-context)
 run.py                  → CLI entry point
 ```
+
+**Двете лица.** Pages сервира ЦЯЛАТА `output/` директория, затова
+`methodology.html` е жив на `/methodology.html` без нито един ред в workflow-а.
+`--briefing` ражда ДВЕТЕ страници в един ритуал: лицето носи линк-карта +
+тийзър, страницата носи всичките 15 методологични секции. Общият стил живее в
+`export/page_style.py` (`BASE_CSS`) — прецедентът е №43: една декларация на две
+места се разминава тихо.
 
 Редът в `run.py::_score_everything` е фиксиран:
 `_build_snapshot` → **`splice_loans`** → `compute_lens_reports` → композит.

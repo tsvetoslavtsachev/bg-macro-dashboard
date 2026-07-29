@@ -302,3 +302,38 @@ def test_the_fiscal_series_carry_the_lever_and_the_drift_in_their_hints():
     """Числото пътува с изречението си: единственият домашен лост · дрейфът."""
     assert "лост" in SERIES_CATALOG["BG_GOV_BALANCE"]["narrative_hint"]
     assert "ДРЕЙФА" in SERIES_CATALOG["BG_GOV_DEBT"]["narrative_hint"]
+
+
+# ── README-то догонва каталога (мандат №52 §А5) ──────────────────────────────
+
+def test_readme_catalogue_section_counts_what_the_catalogue_holds():
+    """№50 остави README на „18 серии" и без фискалните редове — тихата
+    неистина живя два мандата. Гардът брои от КАТАЛОГА, не от преписано число."""
+    from pathlib import Path
+
+    import catalog.series as series_module
+
+    readme = (Path(series_module.__file__).parents[1] / "README.md").read_text(
+        encoding="utf-8"
+    )
+    scored = [k for k, v in SERIES_CATALOG.items() if not v.get("context_only")]
+    context = [k for k, v in SERIES_CATALOG.items() if v.get("context_only")]
+
+    assert f"**{len(SERIES_CATALOG)} записа**" in readme
+    assert f"**{len(scored)} скорирани**" in readme
+    assert f"**{len(context)} контекстни**" in readme
+    for key in SERIES_CATALOG:
+        assert f"| {key} |" in readme, key
+
+
+def test_readme_names_the_methodology_page():
+    """Второто лице има адрес и в документацията (мандат №52)."""
+    from pathlib import Path
+
+    import catalog.series as series_module
+
+    readme = (Path(series_module.__file__).parents[1] / "README.md").read_text(
+        encoding="utf-8"
+    )
+    assert "methodology.html" in readme
+    assert "Как да четеш този дашборд" in readme

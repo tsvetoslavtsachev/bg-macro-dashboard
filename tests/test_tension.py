@@ -487,21 +487,35 @@ def test_the_tension_row_tooltip_carries_the_receipt_and_the_declaration(rendere
         assert token in rendered, token
 
 
-def test_html_methodology_explains_the_tension_layer(rendered):
-    assert "<h4>Тензионният слой (К1 „Погасяването“)</h4>" in rendered
+@pytest.fixture(scope="module")
+def methodology(live_history, tmp_path_factory):
+    """Методологичната страница, както я строи `run.py --briefing` (мандат №52).
+
+    Тензионните обяснения слязоха от лицето на собствената си страница —
+    асерциите ги следват там, вместо да изчезнат.
+    """
+    from export.methodology import generate_methodology
+
+    out = tmp_path_factory.mktemp("methodology") / "methodology.html"
+    generate_methodology(str(out), history=live_history)
+    return out.read_text(encoding="utf-8")
+
+
+def test_methodology_explains_the_tension_layer(methodology):
+    assert "<h4>Тензионният слой (К1 „Погасяването“)</h4>" in methodology
     for token in ("не оцелява до нетното отклонение", "детектор на криза",
                   "leave-one-out аукцион", "0.008", "0.995"):
-        assert token in rendered, token
+        assert token in methodology, token
 
 
-def test_html_methodology_carries_both_housing_hypotheses_without_a_winner(rendered):
+def test_methodology_carries_both_housing_hypotheses_without_a_winner(methodology):
     """Двете пътеки стоят РАВНОСТОЙНО — с числа, с фалсификатори, без победител."""
     for token in ("две живи хипотези", "заместващата", "ливъриджната",
                   "+213%", "+176%", "26.3%", "24.6%", "+9пп",
                   "Фалсификаторите", "Ирландия 2005-07", "29.07.2026"):
-        assert token in rendered, token
+        assert token in methodology, token
     for forbidden in ("хипотезата е потвърдена", "доказва, че", "установено е"):
-        assert forbidden not in rendered, forbidden
+        assert forbidden not in methodology, forbidden
 
 
 def test_html_draws_the_tension_line_on_its_own_right_axis(rendered):

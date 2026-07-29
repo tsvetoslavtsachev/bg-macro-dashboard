@@ -4,7 +4,8 @@ tests/test_form_canon.py
 ФОРМА-КАНОН пасът на повърхността (мандат №38 §А5).
 
 Изводът първо · линк на всяко име към първоизточника · обяснение на място ·
-един речник · методология при уреда · застоялото наблюдение маркирано.
+един речник · методологията на ЕДНА клика (мандат №52) · застоялото
+наблюдение маркирано.
 """
 import html as _html
 from datetime import date
@@ -28,6 +29,12 @@ from core.display import (
     months_old,
     source_url,
     verdict_sentence,
+)
+from export.methodology import (
+    METHODOLOGY_HREF,
+    METHODOLOGY_TEASER,
+    METHODOLOGY_TITLE,
+    generate_methodology,
 )
 from export.weekly_briefing import generate_html
 
@@ -220,11 +227,30 @@ def test_html_shows_the_verdict_sentence_first(rendered):
     assert "Тежи" in rendered and "крепи" in rendered
 
 
-def test_html_carries_the_methodology_block(rendered):
-    assert "Как да четеш този дашборд" in rendered
-    assert "<details class=\"methodology\" open>" in rendered
-    assert "tanh" in rendered
-    assert "U-форма" in rendered
+@pytest.fixture
+def methodology(tmp_path):
+    """Второто лице: методологията на собствената си страница (мандат №52).
+
+    Тестовете, които гледаха методологичните низове В `index.html`, са
+    ПРЕНАСОЧЕНИ тук — съдържанието е преместено, не изтрито.
+    """
+    out = tmp_path / "methodology.html"
+    generate_methodology(str(out))
+    return out.read_text(encoding="utf-8")
+
+
+def test_the_face_links_to_the_methodology_page_instead_of_carrying_it(rendered):
+    """Мандат №52: блокът ПАДА от лицето, остава линк-карта + тийзър."""
+    assert '<details class="methodology"' not in rendered
+    assert f'href="{METHODOLOGY_HREF}"' in rendered
+    assert METHODOLOGY_TITLE in rendered
+    assert METHODOLOGY_TEASER in rendered
+
+
+def test_methodology_page_carries_the_scale_and_the_u_shape(methodology):
+    assert METHODOLOGY_TITLE in methodology
+    assert "tanh" in methodology
+    assert "U-форма" in methodology
 
 
 def test_html_uses_the_bulgarian_lens_badges(rendered):
@@ -261,14 +287,14 @@ def test_html_radar_and_chart_palette_know_every_lens(rendered):
     assert '"property": "rgba(251,146,60,0.08)"' in rendered
 
 
-def test_html_methodology_names_the_lens_count_and_the_rebalance(rendered):
+def test_methodology_names_the_lens_count_and_the_rebalance(methodology):
     """„Претеглена средна на шестте лещи“ щеше да стане тиха неистина (№50)."""
-    assert "Претеглена средна на седемте лещи" in rendered
-    assert "шестте лещи" not in rendered
-    assert "петте лещи" not in rendered
-    assert "имоти и строителство 12%" in rendered
-    assert "държавни финанси 12%" in rendered
-    assert "не се сравнява" in rendered
+    assert "Претеглена средна на седемте лещи" in methodology
+    assert "шестте лещи" not in methodology
+    assert "петте лещи" not in methodology
+    assert "имоти и строителство 12%" in methodology
+    assert "държавни финанси 12%" in methodology
+    assert "не се сравнява" in methodology
 
 
 # ── Мандат №50: седмата леща на лицето ───────────────────────────────────────
@@ -283,13 +309,13 @@ def test_html_draws_the_seventh_module_bar_and_badge(rendered):
     assert '"fiscal": "Държавни финанси"' in rendered
 
 
-def test_html_methodology_explains_the_fiscal_lens(rendered):
+def test_methodology_explains_the_fiscal_lens(methodology):
     """ФОРМА-КАНОН: обяснението стои ПРИ уреда — какво мери, честността, котвите."""
-    assert "<h4>Държавните финанси</h4>" in rendered
+    assert "<h4>Държавните финанси</h4>" in methodology
     for token in ("fiscal_balance", "debt", "B9", "плюсът е излишък",
                   "4-тримесечна плъзгаща", "дрейфа", "Маастрихтските",
                   "не прагове в скоринга", "единственият домашен макро"):
-        assert token in rendered, token
+        assert token in methodology, token
 
 
 def test_html_fiscal_rows_link_to_the_eurostat_datasets(rendered):
@@ -298,37 +324,37 @@ def test_html_fiscal_rows_link_to_the_eurostat_datasets(rendered):
         assert source_url(spec["source"], spec["id"]) in rendered, key
 
 
-def test_html_explains_the_property_lens_and_its_resolved_polarity(rendered):
+def test_methodology_explains_the_property_lens_and_its_resolved_polarity(methodology):
     """ФОРМА-КАНОН: обяснението стои ПРИ уреда. След №47 двузначността е
     РЕШЕНА — лицето вече не я обявява за отворен въпрос."""
-    assert "<h4>Имоти и строителство</h4>" in rendered
+    assert "<h4>Имоти и строителство</h4>" in methodology
     for token in ("prices", "activity", "pipeline", "решена",
                   "разрешителните", "риск утре", "4-тримесечна плъзгаща"):
-        assert token in rendered, token
-    assert "под преглед" not in rendered
+        assert token in methodology, token
+    assert "под преглед" not in methodology
 
 
 # ── Мандат №47: оптималните зони + термометърът ──────────────────────────────
 
-def test_html_methodology_explains_the_optimal_zones(rendered):
+def test_methodology_explains_the_optimal_zones(methodology):
     """Числото не пътува без обяснението си: зони, наклон, provenance, гейт."""
     from catalog.polarity import OPT_PROVENANCE, OPT_SOURCE_NOTE
 
-    assert "<h4>Оптималните зони и температурата</h4>" in rendered
-    assert OPT_SOURCE_NOTE in rendered
+    assert "<h4>Оптималните зони и температурата</h4>" in methodology
+    assert OPT_SOURCE_NOTE in methodology
     for token in ("оптимална зона", "плато", "1σ", "не участват"):
-        assert token in rendered, token
+        assert token in methodology, token
     for provenance in OPT_PROVENANCE.values():
-        assert _html.escape(provenance) in rendered
+        assert _html.escape(provenance) in methodology
 
 
-def test_html_methodology_prints_the_zone_table_from_the_polarity_map(rendered):
+def test_methodology_prints_the_zone_table_from_the_polarity_map(methodology):
     """Праговете се ГЕНЕРИРАТ от POLARITY — нула преписани числа в лицето."""
     from analysis.temperature import zone_table
 
     for z in zone_table(SERIES_CATALOG):
-        assert f"<td>{z['lo']:.0f} … {z['hi']:.0f}%</td>" in rendered, z["key"]
-        assert f"<td>{z['s']:.0f} пп</td>" in rendered, z["key"]
+        assert f"<td>{z['lo']:.0f} … {z['hi']:.0f}%</td>" in methodology, z["key"]
+        assert f"<td>{z['s']:.0f} пп</td>" in methodology, z["key"]
 
 
 def test_html_hero_carries_the_overheating_badge(rendered_with_temp):
@@ -419,22 +445,22 @@ def test_html_does_not_flag_a_thin_window_when_every_series_is_long(rendered):
     assert 'class="thin" title=' not in rendered
 
 
-def test_html_explains_the_credit_splice_in_the_methodology(rendered):
+def test_methodology_explains_the_credit_splice(methodology):
     """Обяснението стои ПРИ уреда, не в друг документ (ФОРМА-КАНОН).
 
     Мандат №41: лицето вече описва ШЕВА (БНБ seed + ЕЦБ BSI), а не късия
     прозорец — иначе методологията щеше да твърди нещо, което вече не е вярно.
     """
-    assert "Дългата кредитна памет" in rendered
-    assert "2005Q4" in rendered
-    assert "01.2022" in rendered
-    assert "0.5%" in rendered
+    assert "Дългата кредитна памет" in methodology
+    assert "2005Q4" in methodology
+    assert "01.2022" in methodology
+    assert "0.5%" in methodology
 
 
-def test_html_keeps_the_generic_thin_window_explanation(rendered):
+def test_methodology_keeps_the_generic_thin_window_explanation(methodology):
     """⚠ механизмът остава — просто вече не сочи към кредитните серии."""
-    assert "Къс прозорец" in rendered
-    assert "подценява екстремността" in rendered
+    assert "Къс прозорец" in methodology
+    assert "подценява екстремността" in methodology
 
 
 def test_html_footer_names_the_ecb_portal(rendered):
@@ -494,12 +520,12 @@ def test_html_marks_the_context_series_with_a_grey_badge_and_no_score(rendered):
     assert f'"context": "{CONTEXT_LINE_COLOR}"' in rendered
 
 
-def test_html_methodology_explains_the_two_voices(rendered):
-    assert "<h4>Инфлацията: двата гласа</h4>" in rendered
-    assert "<h4>Усещаната инфлация — контекст, не компонент</h4>" in rendered
+def test_methodology_explains_the_two_voices(methodology):
+    assert "<h4>Инфлацията: двата гласа</h4>" in methodology
+    assert "<h4>Усещаната инфлация — контекст, не компонент</h4>" in methodology
     for token in ("процентни пункта", "≤1 пп", "1–2 пп", "НЕ са калибрирани",
                   "баланс", "не влиза в композита"):
-        assert token in rendered, token
+        assert token in methodology, token
 
 
 # ── Мандат №45: филмът на композита + WoW блокът ─────────────────────────────
@@ -592,10 +618,10 @@ def test_html_wow_block_warns_when_the_composition_changed(tmp_path):
     assert "делтата не е чиста" in html
 
 
-def test_html_film_explains_itself_in_the_methodology(rendered_with_film):
-    assert "Филмът на композита" in rendered_with_film
-    assert "реконструкция" in rendered_with_film
-    assert "score_journal.csv" in rendered_with_film
+def test_methodology_explains_the_film(methodology):
+    assert "Филмът на композита" in methodology
+    assert "реконструкция" in methodology
+    assert "score_journal.csv" in methodology
 
 
 def test_html_without_history_skips_the_film_card(rendered):
