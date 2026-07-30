@@ -6,3 +6,6 @@ __pycache__/
 venv/
 *.log
 .DS_Store
+
+# Клиентските документи НЕ се публикуват (Pages сервира цялата output/; CI прави git add -A)
+output/client_briefs_bg/
