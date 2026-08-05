@@ -26,6 +26,12 @@ export/page_style.py    → ОБЩИЯТ CSS на двете лица — едн
 export/weekly_briefing.py → HTML дашборд с Plotly.js → output/index.html
 export/methodology.py   → „Как да четеш този дашборд" → output/methodology.html (М52)
 export/briefing_context.py → Markdown context за LLM (--export-context)
+export/macro_state.py   → машинният api export → output/api/macro_state.json
+                          (мандат ORGANISM-v1, bg огледалото на jp Ф1): фамилната
+                          схема; executive_summary ЦИТИРА последния журнален ред
+                          (fail-loud без него); regime_key от config.REGIME_KEYS;
+                          ражда се при --briefing СЛЕД журнала. Консуматори:
+                          macro-satellite + организмовият дрил.
 run.py                  → CLI entry point
 ```
 

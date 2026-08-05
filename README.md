@@ -469,7 +469,8 @@ PYTHONUTF8=1 python scripts/extract_bnb_seed.py --raw data/manual/raw/<нов ф
 ```bash
 pip install -r requirements.txt
 
-# Обновяване на данните и генериране на дашборд
+# Обновяване на данните и генериране на дашборд (+ машинният api export
+# output/api/macro_state.json — фамилният шаблон, мандат ORGANISM-v1)
 python run.py --briefing --refresh
 
 # Само статус (композит, лещи, последни стойности)
