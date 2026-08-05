@@ -303,11 +303,17 @@ def cache_snapshot():
 
 
 def test_the_perceived_series_is_in_the_committed_cache(cache_snapshot):
-    """Живо проверено 28.07.2026: 75.4 @2026-06, пълна история от 2001-05."""
+    """Живо проверено 28.07.2026: 75.4 @2026-06, пълна история от 2001-05.
+
+    Пинът е върху ПРОВЕРЕНОТО наблюдение (стабилен исторически факт), не върху
+    подвижния фронтир: CI-ят освежава кеша седмично и `s.index[-1]` мърда
+    напред (уловено 05.08.2026 — юлската точка 76.4 събори равенството и щеше
+    да събори pytest гейта на следващия ритуал). Фронтирът само не бива да
+    ОТСТЪПВА зад проверения марк."""
     s = cache_snapshot[PERCEIVED].dropna()
     assert len(s) >= 300
-    assert s.index[-1] == pd.Timestamp("2026-06-01")
-    assert float(s.iloc[-1]) == pytest.approx(75.4)
+    assert float(s.loc[pd.Timestamp("2026-06-01")]) == pytest.approx(75.4)
+    assert s.index[-1] >= pd.Timestamp("2026-06-01")
     assert s.index[0] == pd.Timestamp("2001-05-01")
 
 
