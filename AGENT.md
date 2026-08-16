@@ -31,7 +31,7 @@ export/macro_state.py   → машинният api export → output/api/macro_s
                           схема; executive_summary ЦИТИРА последния журнален ред
                           (fail-loud без него); regime_key от config.REGIME_KEYS;
                           ражда се при --briefing СЛЕД журнала. Консуматори:
-                          macro-satellite + организмовият дрил.
+                          macro-satellite + аналитичният дрил.
 run.py                  → CLI entry point
 ```
 
