@@ -2,7 +2,7 @@
   "BG_GDP_YOY": {
     "source_id": "namq_10_gdp?geo=BG&unit=CLV_PCH_SM&na_item=B1GQ&s_adj=SCA",
     "schedule": "quarterly",
-    "last_fetched": "2026-08-15T03:20:44.439918",
+    "last_fetched": "2026-08-31T11:57:29.823387",
     "last_observation": "2026-04-01",
     "n_observations": 118,
     "data": {
@@ -129,7 +129,7 @@
   "BG_INDPRO": {
     "source_id": "sts_inpr_m?geo=BG&nace_r2=B-D&s_adj=CA&indic_bt=PRD&unit=I21",
     "schedule": "monthly",
-    "last_fetched": "2026-08-15T03:20:46.065107",
+    "last_fetched": "2026-08-31T11:57:31.889887",
     "last_observation": "2026-06-01",
     "n_observations": 318,
     "data": {
@@ -456,7 +456,7 @@
   "BG_CONS": {
     "source_id": "namq_10_gdp?geo=BG&unit=CLV_PCH_SM&na_item=P31_S14_S15&s_adj=SCA",
     "schedule": "quarterly",
-    "last_fetched": "2026-08-15T03:20:47.527368",
+    "last_fetched": "2026-08-31T11:57:33.641845",
     "last_observation": "2026-01-01",
     "n_observations": 117,
     "data": {
@@ -582,9 +582,9 @@
   "BG_ESI": {
     "source_id": "ei_bssi_m_r2?geo=BG&indic=BS-ESI-I&s_adj=SA",
     "schedule": "monthly",
-    "last_fetched": "2026-08-15T03:20:48.450667",
-    "last_observation": "2026-07-01",
-    "n_observations": 403,
+    "last_fetched": "2026-08-31T11:57:34.811415",
+    "last_observation": "2026-08-01",
+    "n_observations": 404,
     "data": {
       "1993-01-01": 64.0,
       "1993-02-01": 55.5,
@@ -595,7 +595,7 @@
       "1993-07-01": 44.8,
       "1993-08-01": 43.7,
       "1993-09-01": 51.4,
-      "1993-10-01": 57.4,
+      "1993-10-01": 57.5,
       "1993-11-01": 62.5,
       "1993-12-01": 62.6,
       "1994-01-01": 66.1,
@@ -627,7 +627,7 @@
       "1996-03-01": 107.0,
       "1996-04-01": 100.6,
       "1996-05-01": 96.6,
-      "1996-06-01": 96.6,
+      "1996-06-01": 96.5,
       "1996-07-01": 100.4,
       "1996-08-01": 95.8,
       "1996-09-01": 91.4,
@@ -645,7 +645,7 @@
       "1997-09-01": 110.6,
       "1997-10-01": 115.9,
       "1997-11-01": 113.7,
-      "1997-12-01": 112.7,
+      "1997-12-01": 112.6,
       "1998-01-01": 109.8,
       "1998-02-01": 99.0,
       "1998-03-01": 104.0,
@@ -690,7 +690,7 @@
       "2001-06-01": 98.4,
       "2001-07-01": 107.4,
       "2001-08-01": 109.6,
-      "2001-09-01": 109.3,
+      "2001-09-01": 109.4,
       "2001-10-01": 101.2,
       "2001-11-01": 100.6,
       "2001-12-01": 102.5,
@@ -713,7 +713,7 @@
       "2003-05-01": 100.2,
       "2003-06-01": 100.8,
       "2003-07-01": 103.4,
-      "2003-08-01": 104.4,
+      "2003-08-01": 104.5,
       "2003-09-01": 106.1,
       "2003-10-01": 104.7,
       "2003-11-01": 103.5,
@@ -762,7 +762,7 @@
       "2007-06-01": 121.1,
       "2007-07-01": 117.7,
       "2007-08-01": 114.3,
-      "2007-09-01": 115.4,
+      "2007-09-01": 115.5,
       "2007-10-01": 115.1,
       "2007-11-01": 115.0,
       "2007-12-01": 114.8,
@@ -817,7 +817,7 @@
       "2012-01-01": 91.3,
       "2012-02-01": 85.9,
       "2012-03-01": 91.4,
-      "2012-04-01": 90.9,
+      "2012-04-01": 90.8,
       "2012-05-01": 90.8,
       "2012-06-01": 93.2,
       "2012-07-01": 93.6,
@@ -868,7 +868,7 @@
       "2016-04-01": 100.2,
       "2016-05-01": 99.2,
       "2016-06-01": 102.0,
-      "2016-07-01": 103.1,
+      "2016-07-01": 103.0,
       "2016-08-01": 101.1,
       "2016-09-01": 102.8,
       "2016-10-01": 104.3,
@@ -907,7 +907,7 @@
       "2019-07-01": 102.8,
       "2019-08-01": 102.8,
       "2019-09-01": 102.7,
-      "2019-10-01": 103.8,
+      "2019-10-01": 103.9,
       "2019-11-01": 102.4,
       "2019-12-01": 104.2,
       "2020-01-01": 102.5,
@@ -965,19 +965,19 @@
       "2024-05-01": 104.4,
       "2024-06-01": 105.8,
       "2024-07-01": 104.9,
-      "2024-08-01": 105.2,
+      "2024-08-01": 105.1,
       "2024-09-01": 107.1,
       "2024-10-01": 106.7,
-      "2024-11-01": 105.2,
+      "2024-11-01": 105.3,
       "2024-12-01": 105.4,
-      "2025-01-01": 104.2,
+      "2025-01-01": 104.3,
       "2025-02-01": 104.6,
       "2025-03-01": 105.1,
       "2025-04-01": 102.5,
       "2025-05-01": 103.3,
       "2025-06-01": 103.8,
       "2025-07-01": 103.1,
-      "2025-08-01": 103.2,
+      "2025-08-01": 103.1,
       "2025-09-01": 102.9,
       "2025-10-01": 101.2,
       "2025-11-01": 101.0,
@@ -988,13 +988,14 @@
       "2026-04-01": 94.4,
       "2026-05-01": 95.5,
       "2026-06-01": 95.0,
-      "2026-07-01": 94.7
+      "2026-07-01": 94.7,
+      "2026-08-01": 96.8
     }
   },
   "BG_HICP": {
     "source_id": "prc_hicp_minr?geo=BG&coicop18=TOTAL&unit=RCH_A",
     "schedule": "monthly",
-    "last_fetched": "2026-08-15T03:20:50.902178",
+    "last_fetched": "2026-08-31T11:57:37.695853",
     "last_observation": "2026-07-01",
     "n_observations": 344,
     "data": {
@@ -1341,13 +1342,13 @@
       "2026-04-01": 6.0,
       "2026-05-01": 6.3,
       "2026-06-01": 5.2,
-      "2026-07-01": 4.1
+      "2026-07-01": 4.4
     }
   },
   "BG_HICP_CORE": {
     "source_id": "prc_hicp_minr?geo=BG&coicop18=TOT_X_NRG_FOOD&unit=RCH_A",
     "schedule": "monthly",
-    "last_fetched": "2026-08-15T03:20:51.819269",
+    "last_fetched": "2026-08-31T11:57:38.843687",
     "last_observation": "2026-07-01",
     "n_observations": 344,
     "data": {
@@ -1694,13 +1695,13 @@
       "2026-04-01": 4.6,
       "2026-05-01": 4.9,
       "2026-06-01": 4.6,
-      "2026-07-01": 3.9
+      "2026-07-01": 4.0
     }
   },
   "BG_UNRATE": {
     "source_id": "une_rt_m?geo=BG&unit=PC_ACT&sex=T&age=TOTAL&s_adj=SA",
     "schedule": "monthly",
-    "last_fetched": "2026-08-15T03:20:53.619057",
+    "last_fetched": "2026-08-31T11:57:41.868445",
     "last_observation": "2026-06-01",
     "n_observations": 318,
     "data": {
@@ -2027,7 +2028,7 @@
   "BG_WAGES": {
     "source_id": "namq_10_a10?geo=BG&unit=CP_MEUR&nace_r2=TOTAL&na_item=D1&s_adj=SCA",
     "schedule": "quarterly",
-    "last_fetched": "2026-08-15T03:20:55.138146",
+    "last_fetched": "2026-08-31T11:57:43.598962",
     "last_observation": "2026-01-01",
     "n_observations": 125,
     "data": {
@@ -2161,7 +2162,7 @@
   "BG_LT_RATE": {
     "source_id": "irt_lt_mcby_m?geo=BG",
     "schedule": "monthly",
-    "last_fetched": "2026-08-15T03:20:57.719670",
+    "last_fetched": "2026-08-31T11:57:46.833125",
     "last_observation": "2026-07-01",
     "n_observations": 283,
     "data": {
@@ -2453,7 +2454,7 @@
   "BG_CA_GDP": {
     "source_id": "bop_gdp6_q?geo=BG&bop_item=CA&stk_flow=BAL&partner=WRL_REST",
     "schedule": "quarterly",
-    "last_fetched": "2026-08-15T03:20:55.967068",
+    "last_fetched": "2026-08-31T11:57:44.618137",
     "last_observation": "2026-01-01",
     "n_observations": 113,
     "data": {
@@ -2575,7 +2576,7 @@
   "BG_TRADE_GS": {
     "source_id": "bop_gdp6_q?geo=BG&bop_item=GS&stk_flow=BAL&partner=WRL_REST",
     "schedule": "quarterly",
-    "last_fetched": "2026-08-15T03:20:56.807863",
+    "last_fetched": "2026-08-31T11:57:45.652439",
     "last_observation": "2026-01-01",
     "n_observations": 113,
     "data": {
@@ -2697,7 +2698,7 @@
   "BG_HPI": {
     "source_id": "prc_hpi_q?geo=BG&purchase=TOTAL&unit=RCH_A",
     "schedule": "quarterly",
-    "last_fetched": "2026-08-15T03:20:58.541351",
+    "last_fetched": "2026-08-31T11:57:47.836827",
     "last_observation": "2026-01-01",
     "n_observations": 81,
     "data": {
@@ -2787,7 +2788,7 @@
   "BG_CONSTR": {
     "source_id": "sts_copr_m?geo=BG&nace_r2=F&s_adj=CA&indic_bt=PRD&unit=I21",
     "schedule": "monthly",
-    "last_fetched": "2026-08-15T03:21:00.151490",
+    "last_fetched": "2026-08-31T11:57:49.759073",
     "last_observation": "2026-06-01",
     "n_observations": 318,
     "data": {
@@ -3114,7 +3115,7 @@
   "BG_PERMITS": {
     "source_id": "sts_cobp_q?geo=BG&indic_bt=BPRM_SQM&cpa2_1=CPA_F41001&s_adj=SCA&unit=I21",
     "schedule": "quarterly",
-    "last_fetched": "2026-08-15T03:21:01.682633",
+    "last_fetched": "2026-08-31T11:57:51.455191",
     "last_observation": "2026-04-01",
     "n_observations": 106,
     "data": {
@@ -3229,9 +3230,9 @@
   "BG_INFL_PERCEIVED": {
     "source_id": "ei_bsco_m?geo=BG&indic=BS-PT-LY&s_adj=SA&unit=BAL",
     "schedule": "monthly",
-    "last_fetched": "2026-08-15T03:20:52.707832",
-    "last_observation": "2026-07-01",
-    "n_observations": 303,
+    "last_fetched": "2026-08-31T11:57:40.724520",
+    "last_observation": "2026-08-01",
+    "n_observations": 304,
     "data": {
       "2001-05-01": 9.8,
       "2001-06-01": -0.3,
@@ -3535,13 +3536,14 @@
       "2026-04-01": 74.3,
       "2026-05-01": 77.1,
       "2026-06-01": 75.4,
-      "2026-07-01": 76.4
+      "2026-07-01": 76.4,
+      "2026-08-01": 75.9
     }
   },
   "BG_GOV_BALANCE": {
     "source_id": "gov_10q_ggnfa?geo=BG&unit=PC_GDP&s_adj=NSA&sector=S13&na_item=B9",
     "schedule": "quarterly",
-    "last_fetched": "2026-08-15T03:21:03.452189",
+    "last_fetched": "2026-08-31T11:57:54.329140",
     "last_observation": "2026-01-01",
     "n_observations": 109,
     "data": {
@@ -3659,7 +3661,7 @@
   "BG_GOV_DEBT": {
     "source_id": "gov_10q_ggdebt?geo=BG&na_item=GD&sector=S13&unit=PC_GDP",
     "schedule": "quarterly",
-    "last_fetched": "2026-08-15T03:21:04.279170",
+    "last_fetched": "2026-08-31T11:57:55.399874",
     "last_observation": "2026-01-01",
     "n_observations": 110,
     "data": {
@@ -3778,9 +3780,9 @@
   "BG_RENTS": {
     "source_id": "prc_hicp_minr?geo=BG&coicop18=CP041&unit=RCH_A",
     "schedule": "monthly",
-    "last_fetched": "2026-08-15T03:21:02.630564",
-    "last_observation": "2026-06-01",
-    "n_observations": 343,
+    "last_fetched": "2026-08-31T11:57:53.312200",
+    "last_observation": "2026-07-01",
+    "n_observations": 344,
     "data": {
       "1997-12-01": 566.0,
       "1998-01-01": 359.4,
@@ -4124,13 +4126,14 @@
       "2026-03-01": 10.2,
       "2026-04-01": 9.4,
       "2026-05-01": 10.2,
-      "2026-06-01": 10.1
+      "2026-06-01": 10.1,
+      "2026-07-01": 8.5
     }
   },
   "BG_NGDP": {
     "source_id": "namq_10_gdp?geo=BG&unit=CP_MEUR&na_item=B1GQ&s_adj=NSA",
     "schedule": "quarterly",
-    "last_fetched": "2026-08-15T03:20:49.998326",
+    "last_fetched": "2026-08-31T11:57:36.514830",
     "last_observation": "2026-04-01",
     "n_observations": 126,
     "data": {
