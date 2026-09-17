@@ -441,13 +441,62 @@ def test_the_rents_series_reads_the_hicp_rent_component():
     assert spec["peer_group"] == "context"
 
 
+def _assert_series_tail_is_sane(
+    s: pd.Series, floor_date: str, lo: float, hi: float
+) -> None:
+    """Пази ФОРМАТА на опашката (мандат БГА2, 18.09.2026), не ден-снимка.
+
+    31.08 (`353a90b`) внесе легитимна нова точка в BG_RENTS и оттогава всеки
+    редовен fetch чупеше CI, защото гейтът пазеше точно число/дата от
+    29.07.2026. Тук: индексът е монотонен и без дублирани дати, последната
+    точка не е NaN, последната дата не е ПО-СТАРА от предишната комитната
+    (долен праг, не таван — легитимен нов месец минава без редакция на теста),
+    стойността е в правдоподобен диапазон за г/г промяна на наемите.
+    """
+    assert s.index.is_monotonic_increasing and s.index.is_unique
+    assert pd.notna(s.iloc[-1])
+    assert s.index[-1] >= pd.Timestamp(floor_date)
+    assert lo < float(s.iloc[-1]) < hi
+
+
 def test_the_rents_series_is_in_the_committed_cache(cache_snapshot):
-    """Живо проверено 29.07.2026: 10.1 @06.2026, n=343 от 1997-12."""
+    """Живо проверено 29.07.2026: 10.1 @06.2026, n=343 от 1997-12. Форматът
+
+    оттогава насам живее в `_assert_series_tail_is_sane` — виж там.
+    """
     s = cache_snapshot[RENTS].dropna()
     assert len(s) >= 340
     assert s.index[0] == pd.Timestamp("1997-12-01")
-    assert s.index[-1] == pd.Timestamp("2026-06-01")
-    assert float(s.iloc[-1]) == pytest.approx(10.1)
+    _assert_series_tail_is_sane(s, floor_date="2026-06-01", lo=-5.0, hi=30.0)
+
+
+def test_the_rents_series_tail_check_catches_a_nan_last_point():
+    """Мутация 1/2: последната точка е NaN — гейтът трябва да гръмне."""
+    broken = pd.Series(
+        [9.0, 9.5, float("nan")],
+        index=pd.to_datetime(["2026-04-01", "2026-05-01", "2026-06-01"]),
+    )
+    with pytest.raises(AssertionError):
+        _assert_series_tail_is_sane(broken, floor_date="2026-06-01", lo=-5.0, hi=30.0)
+
+
+def test_the_rents_series_tail_check_catches_a_duplicated_date():
+    """Мутация 2/2: последната дата се дублира — гейтът трябва да гръмне."""
+    broken = pd.Series(
+        [9.0, 9.5, 9.7],
+        index=pd.to_datetime(["2026-04-01", "2026-05-01", "2026-05-01"]),
+    )
+    with pytest.raises(AssertionError):
+        _assert_series_tail_is_sane(broken, floor_date="2026-04-01", lo=-5.0, hi=30.0)
+
+
+def test_the_rents_series_tail_check_passes_a_legitimate_new_month():
+    """Контрол: нормален следващ месец минава БЕЗ редакция на теста."""
+    ok = pd.Series(
+        [9.0, 9.5, 8.7],
+        index=pd.to_datetime(["2026-06-01", "2026-07-01", "2026-08-01"]),
+    )
+    _assert_series_tail_is_sane(ok, floor_date="2026-06-01", lo=-5.0, hi=30.0)
 
 
 def test_the_rents_do_not_confirm_the_substitution_hypothesis(cache_snapshot):

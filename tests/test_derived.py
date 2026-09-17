@@ -264,9 +264,18 @@ def test_the_gap_is_exactly_the_two_displayed_numbers(cache_snapshot):
 
 
 def test_the_rents_stay_the_discriminator(cache_snapshot):
+    """Пази ФОРМАТА (мандат БГА2, 18.09.2026), не 29.07-снимката на 10.1.
+
+    31.08 (`353a90b`) внесе легитимна нова точка в BG_RENTS и всеки следващ
+    fetch чупеше този тест, защото `value` беше заковано на конкретно число.
+    `calm_median`/`calm_label` идват от ЗАТВОРЕН исторически прозорец
+    (2015-19) и не мърдат с нови месеци — пиновете там остават живи, не
+    снимка (виж `tests/test_rents_epochs.py`, мандат №55).
+    """
     h = housing_hypotheses(cache_snapshot)
     rents = h["rents"]
-    assert rents["value"] == pytest.approx(10.1, abs=0.15)
+    assert pd.notna(rents["value"])
+    assert -5.0 < rents["value"] < 30.0
     assert rents["calm_median"] == pytest.approx(1.0, abs=0.15)
     assert rents["calm_label"] == "2015-19"
     assert rents["cooling"] is False
