@@ -2,61 +2,61 @@
   "region": "BG",
   "schema": "bg-macro-state v1",
   "engine": "robust-z-10y-mad",
-  "as_of_date": "2026-09-19",
-  "generated_at": "2026-09-19T07:31:45+00:00",
+  "as_of_date": "2026-09-21",
+  "generated_at": "2026-09-21T11:14:47+00:00",
   "note_bg": "НАБЛЮДЕНИЕ, НЕ СИГНАЛ — уредът наблюдава състояние, не издава сигнал за действие.",
   "executive_summary": {
-    "composite_score": 40.8,
+    "composite_score": 49.5,
     "regime_key": "deteriorating",
     "regime_label_bg": "ВЛОШАВАЩ СЕ",
     "regime_color": "#ff6d00",
-    "n_series": 19,
-    "n_lenses": 7,
-    "temp_count": 2,
-    "k1_ratio": 0.4601,
+    "n_series": 3,
+    "n_lenses": 1,
+    "temp_count": 1,
+    "k1_ratio": null,
     "composition": "23s7l-39f9c6c0",
-    "tension_sentence": "46% от лещовата енергия се погасява в средното — композитът е по-спокоен от състоянието; тежи външният сектор (+5.3 т.), крепи пазарът на труда (-4.2 т.)."
+    "tension_sentence": "Лещовата енергия е 0.5 т. — под прага от 5 т.; показанието е „н.д.“ (няма достатъчно натиск, който да се погасява)."
   },
   "lenses": {
     "inflation": {
-      "score": 40.2,
-      "health_z": -0.397,
-      "n_series": 2
+      "score": null,
+      "health_z": null,
+      "n_series": 0
     },
     "labor": {
-      "score": 71.9,
-      "health_z": 0.939,
-      "n_series": 2
+      "score": null,
+      "health_z": null,
+      "n_series": 0
     },
     "growth": {
-      "score": 46.0,
-      "health_z": -0.159,
-      "n_series": 4
+      "score": null,
+      "health_z": null,
+      "n_series": 0
     },
     "credit": {
-      "score": 41.1,
-      "health_z": -0.361,
-      "n_series": 4
-    },
-    "external": {
-      "score": 2.3,
-      "health_z": -3.768,
-      "n_series": 2
-    },
-    "property": {
-      "score": 60.7,
-      "health_z": 0.436,
+      "score": 49.5,
+      "health_z": -0.021,
       "n_series": 3
     },
+    "external": {
+      "score": null,
+      "health_z": null,
+      "n_series": 0
+    },
+    "property": {
+      "score": null,
+      "health_z": null,
+      "n_series": 0
+    },
     "fiscal": {
-      "score": 20.5,
-      "health_z": -1.353,
-      "n_series": 2
+      "score": null,
+      "health_z": null,
+      "n_series": 0
     }
   },
   "temperature": {
-    "n_hot": 2,
-    "n_total": 5,
+    "n_hot": 1,
+    "n_total": 2,
     "hot": [
       {
         "key": "BG_LOANS_HH",
@@ -66,15 +66,6 @@
         "hi": 12.0,
         "s": 6.0,
         "last_date": "2026-06-01"
-      },
-      {
-        "key": "BG_HPI",
-        "name_bg": "Цени на жилищата (HPI, г/г)",
-        "value": 14.8,
-        "lo": 0.0,
-        "hi": 10.0,
-        "s": 4.0,
-        "last_date": "2026-01-01"
       }
     ],
     "as_of": "2026-06-01"
