@@ -2,7 +2,7 @@
   "BG_LOANS_NFC": {
     "source_id": "BSI/M.BG.N.A.A20.A.1.U6.2240.Z01.E",
     "schedule": "quarterly",
-    "last_fetched": "2026-09-26T07:59:09.664172",
+    "last_fetched": "2026-09-28T12:08:16.343983",
     "last_observation": "2026-08-01",
     "n_observations": 56,
     "data": {
@@ -67,7 +67,7 @@
   "BG_LOANS_HH": {
     "source_id": "BSI/M.BG.N.A.A20.A.1.U6.2250.Z01.E",
     "schedule": "quarterly",
-    "last_fetched": "2026-09-26T07:59:10.565004",
+    "last_fetched": "2026-09-28T12:08:17.531330",
     "last_observation": "2026-08-01",
     "n_observations": 56,
     "data": {
@@ -132,7 +132,7 @@
   "BG_LENDING_RATE": {
     "source_id": "MIR/M.BG.B.A2A.A.R.A.2240.EUR.N",
     "schedule": "monthly",
-    "last_fetched": "2026-09-26T07:59:08.728068",
+    "last_fetched": "2026-09-28T12:08:15.301984",
     "last_observation": "2026-07-01",
     "n_observations": 235,
     "data": {
