@@ -2,7 +2,7 @@
   "BG_LOANS_NFC": {
     "source_id": "BSI/M.BG.N.A.A20.A.1.U6.2240.Z01.E",
     "schedule": "quarterly",
-    "last_fetched": "2026-09-28T12:08:16.343983",
+    "last_fetched": "2026-10-03T08:32:16.398043",
     "last_observation": "2026-08-01",
     "n_observations": 56,
     "data": {
@@ -67,7 +67,7 @@
   "BG_LOANS_HH": {
     "source_id": "BSI/M.BG.N.A.A20.A.1.U6.2250.Z01.E",
     "schedule": "quarterly",
-    "last_fetched": "2026-09-28T12:08:17.531330",
+    "last_fetched": "2026-10-03T08:32:17.277939",
     "last_observation": "2026-08-01",
     "n_observations": 56,
     "data": {
@@ -132,9 +132,9 @@
   "BG_LENDING_RATE": {
     "source_id": "MIR/M.BG.B.A2A.A.R.A.2240.EUR.N",
     "schedule": "monthly",
-    "last_fetched": "2026-09-28T12:08:15.301984",
-    "last_observation": "2026-07-01",
-    "n_observations": 235,
+    "last_fetched": "2026-10-03T08:32:15.401101",
+    "last_observation": "2026-08-01",
+    "n_observations": 236,
     "data": {
       "2007-01-01": 8.69,
       "2007-02-01": 7.81,
@@ -370,7 +370,8 @@
       "2026-04-01": 4.4,
       "2026-05-01": 4.15,
       "2026-06-01": 4.5,
-      "2026-07-01": 4.15
+      "2026-07-01": 4.15,
+      "2026-08-01": 4.36
     }
   }
 }
