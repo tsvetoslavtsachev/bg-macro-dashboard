@@ -3,7 +3,7 @@ sources/ecb_adapter.py
 ======================
 ECB Data Portal SDMX REST адаптер.
 
-Портнат от `dashboards/eu-macro-dashboard/sources/ecb_adapter.py` — същият
+Портнат от `macro/eu-macro-dashboard/sources/ecb_adapter.py` — същият
 формат, същият parser — но лежи върху БГ-версията на `BaseAdapter`
 (`fetch_series(source_id)`, кеш-път като единствен аргумент).
 

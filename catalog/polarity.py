@@ -3,8 +3,8 @@ catalog/polarity.py
 ===================
 Полярностни решения за lens health scoring — ЕДИНЕН източник на истина (BG).
 
-Механизмът е портнат от `dashboards/eu-macro-dashboard/catalog/polarity.py`;
-методологията е в `dashboards/macro-satellite/LENS_SCORING_METHODOLOGY.md` §3.
+Механизмът е портнат от `macro/eu-macro-dashboard/catalog/polarity.py`;
+методологията е в `macro/macro-satellite/LENS_SCORING_METHODOLOGY.md` §3.
 
 Типове:
   +1                        линейна, нагоре = по-здраво (растеж, доверие)
