@@ -2,7 +2,7 @@
   "BG_GDP_YOY": {
     "source_id": "namq_10_gdp?geo=BG&unit=CLV_PCH_SM&na_item=B1GQ&s_adj=SCA",
     "schedule": "quarterly",
-    "last_fetched": "2026-10-12T13:39:41.353251",
+    "last_fetched": "2026-10-17T07:09:43.732184",
     "last_observation": "2026-04-01",
     "n_observations": 118,
     "data": {
@@ -129,7 +129,7 @@
   "BG_INDPRO": {
     "source_id": "sts_inpr_m?geo=BG&nace_r2=B-D&s_adj=CA&indic_bt=PRD&unit=I21",
     "schedule": "monthly",
-    "last_fetched": "2026-10-12T13:39:43.128975",
+    "last_fetched": "2026-10-17T07:09:45.467123",
     "last_observation": "2026-08-01",
     "n_observations": 320,
     "data": {
@@ -458,7 +458,7 @@
   "BG_CONS": {
     "source_id": "namq_10_gdp?geo=BG&unit=CLV_PCH_SM&na_item=P31_S14_S15&s_adj=SCA",
     "schedule": "quarterly",
-    "last_fetched": "2026-10-12T13:39:44.018724",
+    "last_fetched": "2026-10-17T07:09:47.061808",
     "last_observation": "2026-04-01",
     "n_observations": 118,
     "data": {
@@ -585,7 +585,7 @@
   "BG_ESI": {
     "source_id": "ei_bssi_m_r2?geo=BG&indic=BS-ESI-I&s_adj=SA",
     "schedule": "monthly",
-    "last_fetched": "2026-10-12T13:39:45.276108",
+    "last_fetched": "2026-10-17T07:09:48.058016",
     "last_observation": "2026-09-01",
     "n_observations": 405,
     "data": {
@@ -999,7 +999,7 @@
   "BG_HICP": {
     "source_id": "prc_hicp_minr?geo=BG&coicop18=TOTAL&unit=RCH_A",
     "schedule": "monthly",
-    "last_fetched": "2026-10-12T13:39:47.179008",
+    "last_fetched": "2026-10-17T07:09:50.759150",
     "last_observation": "2026-09-01",
     "n_observations": 346,
     "data": {
@@ -1354,7 +1354,7 @@
   "BG_HICP_CORE": {
     "source_id": "prc_hicp_minr?geo=BG&coicop18=TOT_X_NRG_FOOD&unit=RCH_A",
     "schedule": "monthly",
-    "last_fetched": "2026-10-12T13:39:48.289327",
+    "last_fetched": "2026-10-17T07:09:51.783392",
     "last_observation": "2026-09-01",
     "n_observations": 346,
     "data": {
@@ -1703,13 +1703,13 @@
       "2026-06-01": 4.6,
       "2026-07-01": 4.0,
       "2026-08-01": 4.2,
-      "2026-09-01": 4.1
+      "2026-09-01": 4.2
     }
   },
   "BG_UNRATE": {
     "source_id": "une_rt_m?geo=BG&unit=PC_ACT&sex=T&age=TOTAL&s_adj=SA",
     "schedule": "monthly",
-    "last_fetched": "2026-10-12T13:39:50.141386",
+    "last_fetched": "2026-10-17T07:09:53.792922",
     "last_observation": "2026-08-01",
     "n_observations": 320,
     "data": {
@@ -2038,7 +2038,7 @@
   "BG_WAGES": {
     "source_id": "namq_10_a10?geo=BG&unit=CP_MEUR&nace_r2=TOTAL&na_item=D1&s_adj=SCA",
     "schedule": "quarterly",
-    "last_fetched": "2026-10-12T13:39:51.014090",
+    "last_fetched": "2026-10-17T07:09:55.491457",
     "last_observation": "2026-04-01",
     "n_observations": 126,
     "data": {
@@ -2173,9 +2173,9 @@
   "BG_LT_RATE": {
     "source_id": "irt_lt_mcby_m?geo=BG",
     "schedule": "monthly",
-    "last_fetched": "2026-10-12T13:39:53.677814",
-    "last_observation": "2026-08-01",
-    "n_observations": 284,
+    "last_fetched": "2026-10-17T07:09:58.296846",
+    "last_observation": "2026-09-01",
+    "n_observations": 285,
     "data": {
       "2003-01-01": 7.2,
       "2003-02-01": 6.93,
@@ -2460,13 +2460,14 @@
       "2026-05-01": 4.09,
       "2026-06-01": 4.09,
       "2026-07-01": 4.09,
-      "2026-08-01": 4.09
+      "2026-08-01": 4.09,
+      "2026-09-01": 4.09
     }
   },
   "BG_CA_GDP": {
     "source_id": "bop_gdp6_q?geo=BG&bop_item=CA&stk_flow=BAL&partner=WRL_REST",
     "schedule": "quarterly",
-    "last_fetched": "2026-10-12T13:39:51.860133",
+    "last_fetched": "2026-10-17T07:09:56.391682",
     "last_observation": "2026-04-01",
     "n_observations": 114,
     "data": {
@@ -2589,7 +2590,7 @@
   "BG_TRADE_GS": {
     "source_id": "bop_gdp6_q?geo=BG&bop_item=GS&stk_flow=BAL&partner=WRL_REST",
     "schedule": "quarterly",
-    "last_fetched": "2026-10-12T13:39:52.714804",
+    "last_fetched": "2026-10-17T07:09:57.267401",
     "last_observation": "2026-04-01",
     "n_observations": 114,
     "data": {
@@ -2712,7 +2713,7 @@
   "BG_HPI": {
     "source_id": "prc_hpi_q?geo=BG&purchase=TOTAL&unit=RCH_A",
     "schedule": "quarterly",
-    "last_fetched": "2026-10-12T13:39:54.514085",
+    "last_fetched": "2026-10-17T07:09:59.186338",
     "last_observation": "2026-04-01",
     "n_observations": 82,
     "data": {
@@ -2803,7 +2804,7 @@
   "BG_CONSTR": {
     "source_id": "sts_copr_m?geo=BG&nace_r2=F&s_adj=CA&indic_bt=PRD&unit=I21",
     "schedule": "monthly",
-    "last_fetched": "2026-10-12T13:39:55.869226",
+    "last_fetched": "2026-10-17T07:10:00.967734",
     "last_observation": "2026-08-01",
     "n_observations": 320,
     "data": {
@@ -3132,7 +3133,7 @@
   "BG_PERMITS": {
     "source_id": "sts_cobp_q?geo=BG&indic_bt=BPRM_SQM&cpa2_1=CPA_F41001&s_adj=SCA&unit=I21",
     "schedule": "quarterly",
-    "last_fetched": "2026-10-12T13:39:57.802148",
+    "last_fetched": "2026-10-17T07:10:01.926041",
     "last_observation": "2026-04-01",
     "n_observations": 106,
     "data": {
@@ -3247,7 +3248,7 @@
   "BG_INFL_PERCEIVED": {
     "source_id": "ei_bsco_m?geo=BG&indic=BS-PT-LY&s_adj=SA&unit=BAL",
     "schedule": "monthly",
-    "last_fetched": "2026-10-12T13:39:49.233485",
+    "last_fetched": "2026-10-17T07:09:52.799363",
     "last_observation": "2026-09-01",
     "n_observations": 305,
     "data": {
@@ -3561,7 +3562,7 @@
   "BG_GOV_BALANCE": {
     "source_id": "gov_10q_ggnfa?geo=BG&unit=PC_GDP&s_adj=NSA&sector=S13&na_item=B9",
     "schedule": "quarterly",
-    "last_fetched": "2026-10-12T13:39:59.579726",
+    "last_fetched": "2026-10-17T07:10:04.642281",
     "last_observation": "2026-01-01",
     "n_observations": 109,
     "data": {
@@ -3679,7 +3680,7 @@
   "BG_GOV_DEBT": {
     "source_id": "gov_10q_ggdebt?geo=BG&na_item=GD&sector=S13&unit=PC_GDP",
     "schedule": "quarterly",
-    "last_fetched": "2026-10-12T13:40:00.420698",
+    "last_fetched": "2026-10-17T07:10:05.529963",
     "last_observation": "2026-01-01",
     "n_observations": 110,
     "data": {
@@ -3798,9 +3799,9 @@
   "BG_RENTS": {
     "source_id": "prc_hicp_minr?geo=BG&coicop18=CP041&unit=RCH_A",
     "schedule": "monthly",
-    "last_fetched": "2026-10-12T13:39:58.723993",
-    "last_observation": "2026-08-01",
-    "n_observations": 345,
+    "last_fetched": "2026-10-17T07:10:03.729384",
+    "last_observation": "2026-09-01",
+    "n_observations": 346,
     "data": {
       "1997-12-01": 566.0,
       "1998-01-01": 359.4,
@@ -4146,13 +4147,14 @@
       "2026-05-01": 10.2,
       "2026-06-01": 10.1,
       "2026-07-01": 8.5,
-      "2026-08-01": 7.1
+      "2026-08-01": 7.1,
+      "2026-09-01": 7.6
     }
   },
   "BG_NGDP": {
     "source_id": "namq_10_gdp?geo=BG&unit=CP_MEUR&na_item=B1GQ&s_adj=NSA",
     "schedule": "quarterly",
-    "last_fetched": "2026-10-12T13:39:46.134212",
+    "last_fetched": "2026-10-17T07:09:49.752501",
     "last_observation": "2026-04-01",
     "n_observations": 126,
     "data": {
