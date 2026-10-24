@@ -302,7 +302,10 @@ def test_the_spliced_series_is_quarterly_and_reaches_2005():
     seed = load_seed()
     for key, s in seed.items():
         assert s.index[0] == pd.Timestamp("2005-12-01"), key
-        assert pd.infer_freq(s.index) == "QS-DEC", key
+        # Свойството, не името: pandas 3.1 нарича същия индекс „QS-MAR“ при infer_freq
+        # (CI 24.10.2026). Решетката 01.03/06/09/12 без пропуск се сверява дата по дата.
+        grid = pd.date_range(start=s.index[0], periods=len(s), freq="QS-DEC")
+        assert s.index.equals(grid), key
 
 
 def test_quarterly_yoy_uses_four_periods_not_twelve():
