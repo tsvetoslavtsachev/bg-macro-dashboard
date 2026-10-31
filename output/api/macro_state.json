@@ -2,20 +2,20 @@
   "region": "BG",
   "schema": "bg-macro-state v1",
   "engine": "robust-z-10y-mad",
-  "as_of_date": "2026-10-26",
-  "generated_at": "2026-10-26T11:40:27+00:00",
+  "as_of_date": "2026-10-31",
+  "generated_at": "2026-10-31T08:47:16+00:00",
   "note_bg": "НАБЛЮДЕНИЕ, НЕ СИГНАЛ — уредът наблюдава състояние, не издава сигнал за действие.",
   "executive_summary": {
-    "composite_score": 39.9,
+    "composite_score": 39.7,
     "regime_key": "deteriorating",
     "regime_label_bg": "ВЛОШАВАЩ СЕ",
     "regime_color": "#ff6d00",
     "n_series": 19,
     "n_lenses": 7,
     "temp_count": 2,
-    "k1_ratio": 0.4229,
+    "k1_ratio": 0.4246,
     "composition": "23s7l-39f9c6c0",
-    "tension_sentence": "42% от лещовата енергия се погасява в средното — композитът е по-спокоен от състоянието; тежи външният сектор (+5.3 т.), крепи пазарът на труда (-4.5 т.)."
+    "tension_sentence": "42% от лещовата енергия се погасява в средното — композитът е по-спокоен от състоянието; тежи външният сектор (+5.3 т.), крепи пазарът на труда (-4.6 т.)."
   },
   "lenses": {
     "inflation": {
@@ -24,18 +24,18 @@
       "n_series": 2
     },
     "labor": {
-      "score": 72.6,
-      "health_z": 0.972,
+      "score": 73.6,
+      "health_z": 1.024,
       "n_series": 2
     },
     "growth": {
-      "score": 48.8,
-      "health_z": -0.047,
+      "score": 46.8,
+      "health_z": -0.127,
       "n_series": 4
     },
     "credit": {
-      "score": 39.9,
-      "health_z": -0.408,
+      "score": 40.1,
+      "health_z": -0.4,
       "n_series": 4
     },
     "external": {
@@ -61,11 +61,11 @@
       {
         "key": "BG_LOANS_HH",
         "name_bg": "Кредит за домакинствата (г/г)",
-        "value": 20.97,
+        "value": 20.67,
         "lo": 0.0,
         "hi": 12.0,
         "s": 6.0,
-        "last_date": "2026-06-01"
+        "last_date": "2026-09-01"
       },
       {
         "key": "BG_HPI",
@@ -77,6 +77,6 @@
         "last_date": "2026-04-01"
       }
     ],
-    "as_of": "2026-06-01"
+    "as_of": "2026-09-01"
   }
 }
