@@ -418,13 +418,13 @@ def test_catalog_carries_twenty_three_series_of_which_four_are_context():
     параметризиран в `test_catalog.py` от мандат №54 — тук остава броячът и
     огледалният пин за наемите, който роди прецедента.
     """
-    assert len(SERIES_CATALOG) == 23
+    assert len(SERIES_CATALOG) == 30   # ПРОЛЕТР4 БГ-2: +7
     context = [k for k, v in SERIES_CATALOG.items() if v.get("context_only")]
     assert sorted(context) == [
-        "BG_CREDIT_GDP_HH", "BG_INFL_PERCEIVED", "BG_NGDP", "BG_RENTS"
+        "BG_CREDIT_GDP_HH", "BG_INFL_PERCEIVED", "BG_NGDP", "BG_RENTS", "DE_LT_RATE"
     ]
     scored = [k for k, v in SERIES_CATALOG.items() if not v.get("context_only")]
-    assert len(scored) == 19
+    assert len(scored) == 25
     assert validate_catalog() == []
 
 

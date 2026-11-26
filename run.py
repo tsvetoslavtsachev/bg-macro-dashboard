@@ -172,6 +172,14 @@ def cmd_briefing(args):
         today=today,
     )
 
+    # Времеви редове за графиките (ПРОЛЕТР4, БГ-4) — същата схема като US/EU/CN/JP.
+    # Скоровете са от lens_reports (вече пресметнати), не нова сметка.
+    from export.series_data import write_series_data
+    write_series_data(
+        str(BASE_DIR / "output" / "api" / "series_data.json"),
+        snapshot=snapshot, lens_reports=lens_reports, today=today,
+    )
+
     output_file = BASE_DIR / "output" / "index.html"
     generate_html(snapshot, lens_reports, composite, regime, str(output_file),
                   history=history, wow=wow, temp=temp,

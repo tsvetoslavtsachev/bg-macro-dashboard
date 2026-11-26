@@ -57,13 +57,15 @@ def test_catalog_carries_twenty_three_series_of_which_nineteen_are_scored():
     влизат в никоя леща. Ако някой ден контекстна серия се промъкне в леща,
     второто число ще се смени и тестът ще го каже.
     """
-    assert len(SERIES_CATALOG) == 23
+    # ПРОЛЕТР4 (26.11.2026, БГ-2): +6 скорирани (услуги, доверие, търговия, цени на
+    # производител, заетост, спредът към Бунда) и +1 контекстна (доходността на Бунда).
+    assert len(SERIES_CATALOG) == 30
     scored = [k for k, v in SERIES_CATALOG.items() if not v.get("context_only")]
-    assert len(scored) == 19
+    assert len(scored) == 25
     assert all(SERIES_CATALOG[k]["lens"] for k in scored)
     context = sorted(k for k, v in SERIES_CATALOG.items() if v.get("context_only"))
     assert context == [
-        "BG_CREDIT_GDP_HH", "BG_INFL_PERCEIVED", "BG_NGDP", "BG_RENTS"
+        "BG_CREDIT_GDP_HH", "BG_INFL_PERCEIVED", "BG_NGDP", "BG_RENTS", "DE_LT_RATE"
     ]
 
 
@@ -106,10 +108,11 @@ def test_credit_lens_is_four_series_in_three_peer_groups():
     """Мандат №42: цената на новия кредит е ТРЕТИ крак в лещата."""
     credit = {k: v for k, v in SERIES_CATALOG.items() if "credit" in v["lens"]}
     assert set(credit) == {
-        "BG_LT_RATE", "BG_LENDING_RATE", "BG_LOANS_NFC", "BG_LOANS_HH"
+        "BG_LT_RATE", "BG_LENDING_RATE", "BG_LOANS_NFC", "BG_LOANS_HH",
+        "BG_BUND_SPREAD",   # ПРОЛЕТР4 БГ-2: четвърти крак, група `spreads`
     }
     assert {v["peer_group"] for v in credit.values()} == {
-        "yields", "lending", "lending_cost"
+        "yields", "lending", "lending_cost", "spreads"
     }
 
 

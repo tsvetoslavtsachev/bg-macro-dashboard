@@ -5,7 +5,7 @@
 ## Архитектура
 
 ```
-catalog/series.py       → Каталог от 23 записа с metadata (19 скорирани + 4 контекстни)
+catalog/series.py       → Каталог от 30 записа с metadata (25 скорирани + 5 контекстни)
 catalog/polarity.py     → Полярност: +1 / −1 / ("U","target",X) / ("OPT",lo,hi,s)
 analysis/temperature.py → Температурният слой: колко бум-серии са над зоната си (М47)
                           + балонната двойка: съ-прегряване имоти↔кредит (М53)
@@ -13,10 +13,11 @@ analysis/tension.py     → Тензионният слой: К1 „Погася
 sources/eurostat_adapter.py → Eurostat JSON-stat 2.0 клиент с кеш
 sources/ecb_adapter.py  → ECB Data Portal SDMX-JSON клиент с кеш + ретраи
 sources/manual_seed.py  → БНБ seed + тримесечният сплайс на кредитните серии
-sources/derived.py      → ИЗВЕДЕНИТЕ серии: кредит домакинства/БВП (М54)
+sources/derived.py      → ИЗВЕДЕНИТЕ серии: кредит домакинства/БВП (М54), спред към Бунда (ПРОЛЕТР4)
 scripts/extract_bnb_seed.py → еднократна екстракция на seed-а от суровия .xlsx
 core/primitives.py      → трансформации + robust_stats_latest (median/MAD)
-core/scorer.py          → робастен z scoring, лещова агрегация, композит
+core/scorer.py          → робастен z scoring, лещова агрегация, композит; от ПРОЛЕТР4 таван ±6 на серия преди сбора и застоялите извън сбора
+core/staleness.py       → правилото за застояване (над 3 периода зад най-свежата серия от същата каденция), общо за оценката и series_data
 core/display.py         → ФОРМА-КАНОН примитиви (линк, стойност, staleness, извод)
                           + котвеният прочит на инфлацията и усещаната инфлация (М48)
                           + двете хипотези за жилищния бум с ЖИВИ числа (М54)
@@ -27,6 +28,7 @@ export/weekly_briefing.py → HTML дашборд с Plotly.js → output/index.
 export/methodology.py   → „Как да четеш този дашборд" → output/methodology.html (М52)
 export/briefing_context.py → Markdown context за LLM (--export-context)
 export/macro_state.py   → машинният api export → output/api/macro_state.json
+export/series_data.py   → времевите редове → output/api/series_data.json (схемата на US/EU/CN/JP, ПРОЛЕТР4 БГ-4)
                           (мандат ORGANISM-v1, bg огледалото на jp Ф1): фамилната
                           схема; executive_summary ЦИТИРА последния журнален ред
                           (fail-loud без него); regime_key от config.REGIME_KEYS;

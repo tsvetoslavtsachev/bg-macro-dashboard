@@ -168,7 +168,7 @@ def test_catalog_carries_twenty_three_series_after_the_credit_gdp_pair():
     инфлация остава непипната (всяка следваща контекстна серия влиза по нейния
     прецедент).
     """
-    assert len(SERIES_CATALOG) == 23
+    assert len(SERIES_CATALOG) == 30   # ПРОЛЕТР4 БГ-2: +7
 
 
 def test_perceived_series_reads_the_ec_survey_balance():
