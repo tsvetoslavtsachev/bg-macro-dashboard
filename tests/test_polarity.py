@@ -125,7 +125,8 @@ def test_is_opt_rejects_the_other_polarity_types():
 
 def test_everything_else_is_plus_one():
     inverted_or_u = {"BG_UNRATE", "BG_LT_RATE", "BG_LENDING_RATE",
-                     "BG_HICP", "BG_HICP_CORE", "BG_GOV_DEBT"}
+                     "BG_HICP", "BG_HICP_CORE", "BG_GOV_DEBT",
+                     "BG_PPI", "BG_BUND_SPREAD"}   # ПРОЛЕТР4 БГ-2
     for key in SERIES_CATALOG:
         if key in inverted_or_u or is_opt(polarity_for(key)):
             continue

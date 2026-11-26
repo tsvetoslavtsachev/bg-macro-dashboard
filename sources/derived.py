@@ -127,6 +127,22 @@ def credit_to_gdp(
     return ratio
 
 
+# ПРОЛЕТР4 (БГ-2): спредът към Бунда в базисни точки, само за месеци с двете страни.
+SPREAD_KEY = "BG_BUND_SPREAD"
+BG_LT_KEY = "BG_LT_RATE"
+DE_LT_KEY = "DE_LT_RATE"
+
+
+def bund_spread(bg: Optional[pd.Series], de: Optional[pd.Series]) -> Optional[pd.Series]:
+    """(BG 10г − DE 10г) × 100. Ражда се само месец с двете доходности; иначе None."""
+    if bg is None or de is None:
+        return None
+    both = pd.concat([bg.dropna().rename("bg"), de.dropna().rename("de")], axis=1, sort=True).dropna()
+    if both.empty:
+        return None
+    return ((both["bg"] - both["de"]) * 100.0).round(1)
+
+
 def derive_series(snapshot: dict[str, pd.Series]) -> dict[str, pd.Series]:
     """Дописва изведените серии в снапшота. Викa се СЛЕД `splice_loans`.
 
@@ -134,6 +150,14 @@ def derive_series(snapshot: dict[str, pd.Series]) -> dict[str, pd.Series]:
     всички консуматори — `--status`, лицето, context експортът — едно и също
     число от едно място.
     """
+    spread = bund_spread(snapshot.get(BG_LT_KEY), snapshot.get(DE_LT_KEY))
+    if spread is None:
+        logger.warning("%s: липсва съставка (%s или %s) — изведената серия не се ражда.",
+                       SPREAD_KEY, BG_LT_KEY, DE_LT_KEY)
+        snapshot.pop(SPREAD_KEY, None)
+    else:
+        snapshot[SPREAD_KEY] = spread
+
     ratio = credit_to_gdp(snapshot.get(CREDIT_STOCK_KEY), snapshot.get(NGDP_KEY))
     if ratio is None or ratio.empty:
         logger.warning(
