@@ -2,41 +2,41 @@
   "region": "BG",
   "schema": "bg-macro-state v1",
   "engine": "robust-z-10y-mad",
-  "as_of_date": "2026-11-23",
-  "generated_at": "2026-11-23T21:11:19+00:00",
+  "as_of_date": "2026-11-28",
+  "generated_at": "2026-11-28T10:48:29+00:00",
   "note_bg": "НАБЛЮДЕНИЕ, НЕ СИГНАЛ — уредът наблюдава състояние, не издава сигнал за действие.",
   "executive_summary": {
-    "composite_score": 36.9,
-    "regime_key": "deteriorating",
-    "regime_label_bg": "ВЛОШАВАЩ СЕ",
-    "regime_color": "#ff6d00",
-    "n_series": 19,
+    "composite_score": 33.6,
+    "regime_key": "recessionary",
+    "regime_label_bg": "РЕЦЕСИОНЕН",
+    "regime_color": "#d50000",
+    "n_series": 25,
     "n_lenses": 7,
     "temp_count": 2,
-    "k1_ratio": 0.3159,
-    "composition": "23s7l-39f9c6c0",
-    "tension_sentence": "32% от лещовата енергия се погасява в средното — композитът е по-спокоен от състоянието; тежи външният сектор (+4.9 т.), крепи пазарът на труда (-5.0 т.)."
+    "k1_ratio": 0.1178,
+    "composition": "30s7l-455f5ece",
+    "tension_sentence": "12% от лещовата енергия се погасява в средното — композитът е по-спокоен от състоянието; тежи външният сектор (+4.5 т.), крепи пазарът на труда (-3.3 т.)."
   },
   "lenses": {
     "inflation": {
-      "score": 32.9,
-      "health_z": -0.714,
-      "n_series": 2
+      "score": 25.5,
+      "health_z": -1.072,
+      "n_series": 3
     },
     "labor": {
-      "score": 73.6,
-      "health_z": 1.024,
-      "n_series": 2
+      "score": 57.5,
+      "health_z": 0.301,
+      "n_series": 3
     },
     "growth": {
-      "score": 40.9,
-      "health_z": -0.369,
-      "n_series": 4
+      "score": 38.8,
+      "health_z": -0.457,
+      "n_series": 7
     },
     "credit": {
-      "score": 39.2,
-      "health_z": -0.438,
-      "n_series": 4
+      "score": 44.0,
+      "health_z": -0.239,
+      "n_series": 5
     },
     "external": {
       "score": 0.9,
